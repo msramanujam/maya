@@ -96,6 +96,67 @@ check_phase1() {
   else
     bad "container cannot reach http://host.docker.internal:11434/v1/models"
   fi
+
+  # -- story #10: compose scaffold ---------------------------------------
+  local cfg
+  if cfg=$(docker compose --profile core config 2>&1 >/dev/null); then
+    if [ -z "$cfg" ]; then
+      ok "compose config parses clean (no warnings)"
+    else
+      bad "compose config warned: $(printf '%s' "$cfg" | tr '\n' ' ')"
+    fi
+  else
+    bad "compose config failed: $(printf '%s' "$cfg" | tr '\n' ' ')"
+  fi
+
+  # Exactly two containers on the core profile, both up.
+  local running
+  running=$(docker compose --profile core ps --status running \
+              --format '{{.Names}}' 2>/dev/null | awk 'NF' | sort | tr '\n' ' ')
+  if [ "$running" = "maya-librechat maya-mongo " ]; then
+    ok "core profile running: $running"
+  else
+    bad "core profile expected 'maya-librechat maya-mongo', got '${running:-nothing}' (scripts/maya up)"
+  fi
+
+  # Health, not just running — a container that is up but unhealthy is a
+  # failure, and LibreChat answering /health is what the UI depends on.
+  local st
+  for c in maya-mongo maya-librechat; do
+    st=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+           "$c" 2>/dev/null || echo missing)
+    case "$st" in
+      healthy) ok "$c healthy" ;;
+      *)       bad "$c health is '$st' (docker compose logs $c --tail 50)" ;;
+    esac
+  done
+
+  # Publishing: LibreChat on 127.0.0.1 only, Mongo on nothing. A 0.0.0.0
+  # bind here would put conversations on the LAN.
+  local pubs
+  pubs=$(docker compose --profile core ps --format '{{.Names}} {{.Publishers}}' 2>/dev/null)
+  if printf '%s\n' "$pubs" | awk '/maya-mongo/ && /\{[0-9.]+ / {found=1} END {exit !found}'; then
+    bad "maya-mongo publishes a host port: $(printf '%s' "$pubs" | tr '\n' ' ')"
+  else
+    ok "maya-mongo publishes nothing"
+  fi
+  if printf '%s\n' "$pubs" | awk '/maya-librechat/ && /\{127\.0\.0\.1 3080 3080/ {found=1} END {exit !found}'; then
+    ok "maya-librechat publishes 127.0.0.1:3080 only"
+  else
+    bad "maya-librechat is not publishing on 127.0.0.1:3080: $(printf '%s' "$pubs" | tr '\n' ' ')"
+  fi
+  if printf '%s\n' "$pubs" | awk '/\{0\.0\.0\.0 / {found=1} END {exit !found}'; then
+    bad "a container publishes on 0.0.0.0: $(printf '%s' "$pubs" | tr '\n' ' ')"
+  else
+    ok "no container publishes on 0.0.0.0"
+  fi
+
+  # The UI itself, not just the container state.
+  if curl -fsS -m 10 -o /dev/null http://127.0.0.1:3080/ 2>/dev/null; then
+    ok "LibreChat UI answering on http://127.0.0.1:3080"
+  else
+    bad "LibreChat UI not answering on http://127.0.0.1:3080"
+  fi
 }
 
 # ------------------------------------------------------------------- main

@@ -217,5 +217,9 @@ To run every automated check in one go, paste:
 One of those checks tries to sign up and expects to be turned away, so
 seeing `registration refused` in the output is the good result.
 
+If you run this straight after `./scripts/maya up`, it may pause for up
+to a minute and then print `maya-librechat healthy (after 45s)`. That is
+it waiting for LibreChat to finish starting, not a problem.
+
 **Fail:** any line starting with `FAIL`. The text after it says which
 check failed; find the matching section above.

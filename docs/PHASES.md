@@ -157,3 +157,31 @@ running on this host (`madhu-m3-mpb`, `100.92.97.39`), but nothing binds
 to it yet, and LibreChat is still `127.0.0.1` only.
 
 Deferred: nothing new.
+
+### Check health race (bug #17)
+
+The health assertions added by story #10 sampled `docker inspect` once,
+immediately. The operator's procedure is `scripts/maya up` then
+`scripts/check` — exactly that sequence — and LibreChat needs ~45s from
+cold, so a correct stack reported
+`FAIL maya-librechat health is 'starting'`.
+
+`starting` is not a verdict, it is the absence of one, so the check now
+waits it out: poll while `starting`, bounded by `HEALTH_WAIT` (default
+90s, overridable), then assert. `unhealthy`, `none` and `missing` stay
+terminal and fail immediately, and a container still `starting` at the
+bound fails too — the wait is not a way to pass. A run that waited says
+so (`maya-librechat healthy (after 4s)`), so a slow start stays visible
+instead of being hidden by the fix.
+
+Verified: `maya up && check` back to back, no sleep, 17 passed 0 failed
+with `healthy (after 4s)`; LibreChat stopped, FAIL in 1s rather than a
+hang; `HEALTH_WAIT=4` against a cold start, `still starting after 4s`;
+added cost on an already-healthy stack, none measurable.
+
+The wider lesson, and the reason this was worth a bug rather than a
+quiet patch: a check that cries wolf on a healthy stack trains everyone
+to re-run it and ignore the first result, which is how a real failure
+gets waved through.
+
+Deferred: nothing new.

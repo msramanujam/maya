@@ -2,7 +2,7 @@
 gh_issue: 31
 gh_type: bug
 parent: FT-phase-3-litellm-gateway
-status: in-progress
+status: done
 phase: 3
 spec:
 ---

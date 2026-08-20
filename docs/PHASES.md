@@ -562,3 +562,53 @@ Deferred: LiteLLM's database, virtual keys, usage tracking, budgets —
 unchanged from the standing deferral. Trigger: needing per-consumer keys
 or usage attribution.
 
+### LibreChat through the gateway (story #28)
+
+`config/librechat/librechat.yaml` now names no model. Its endpoint is
+`http://maya-litellm:4000/v1`, its key the gateway's master key, its
+default alias `general` and its title alias `fast`. Discovery still by
+`fetch`, which now returns the alias list.
+
+**The swap, demonstrated.** `fast` pointed at the 0.6b; calling it loaded
+`qwen3:0.6b` (4.4 GB). One line changed in
+`config/litellm/config.yaml`, `docker compose restart litellm` alone, and
+the same call loaded the 27B (31 GB) instead. LibreChat's container was
+never touched — `StartedAt` unchanged — and no LibreChat file was edited.
+Reverted afterwards. That is the whole feature, and it is now observable
+rather than asserted.
+
+**The endpoint got renamed, which orphaned existing conversations.**
+LibreChat stores `endpoint` and `model` per conversation and per message,
+so four conversations and seventeen messages still referenced
+`endpoint: "ollama"` and concrete model names. Renaming the endpoint to
+`Maya` — correct, since LibreChat no longer talks to Ollama — would have
+left them readable but not continuable. They were migrated instead:
+`ollama` → `Maya`, `orcarouter/Qwen3.8-27B-Uncensored:q8_0` → `general`,
+`qwen3:0.6b` → `fast`, zero stragglers. A `mongodump` was taken first, to
+`data/backups/20260820-migration-p3.archive`:
+
+    docker cp data/backups/20260820-migration-p3.archive maya-mongo:/tmp/r.archive \
+      && docker exec maya-mongo mongorestore --drop --gzip --archive=/tmp/r.archive
+
+Worth knowing for every later phase that renames an endpoint: the name is
+a foreign key into user data, not just a label.
+
+**The leak check reads its own inputs.** `scripts/check phase3` extracts
+the concrete model names from `config/litellm/config.yaml` and greps for
+each across `config/`, `scripts/`, `compose.yaml` and `.env.example`, so
+it keeps working when the models change. Verified by planting
+`qwen3:0.6b` in the Caddyfile — it failed and named the file.
+
+Scope narrowed from the feature's criterion 4, deliberately: that asked
+for `grep -r` across the whole repo. `docs/` legitimately names models
+when recording what was measured — a build log that cannot say which
+model took 46 GB is worth less than one that can.
+
+`OLLAMA_API_KEY` is gone; the gateway's master key replaced it.
+
+Measured: the picker lists `general, fast, coding, reasoning` and no
+concrete name. `scripts/check`: 31 passed, 0 failed, after a full
+`down` + `up`.
+
+Deferred: nothing new.
+

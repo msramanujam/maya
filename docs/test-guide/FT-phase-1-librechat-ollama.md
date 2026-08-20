@@ -232,9 +232,14 @@ Mac, and a conversation works end to end.
 Log in at https://madhu-m3-mpb.tailadf0a2.ts.net and open the model picker at the top of
 a new chat.
 
-**Pass:** both models are listed —
-`orcarouter/Qwen3.8-27B-Uncensored:q8_0` and `qwen3:0.6b`, under
-**Ollama**.
+**Pass:** four choices are listed under **Maya** — `general`, `fast`,
+`coding` and `reasoning`.
+
+These are nicknames, not models. `general` is the big model for normal
+conversation, `fast` is a small quick one used for chat titles, and
+`coding` and `reasoning` are reserved for later phases. Which actual
+model sits behind each nickname can be changed without touching anything
+you see here.
 
 **Fail:** the list is empty or the picker is missing. Paste
 `cd ~/Dev/maya && ./scripts/maya logs librechat` and look for
@@ -245,7 +250,7 @@ Nothing lists these models by hand — Maya asks Ollama what it has. Run
 
 ### Step 3.2 — Ask it something
 
-Pick `orcarouter/Qwen3.8-27B-Uncensored:q8_0` and send:
+Pick `general` and send:
 
     In one sentence: what is the capital of France?
 
@@ -266,8 +271,9 @@ Look at the conversation list on the left after that first answer.
 **Pass:** the conversation has a short title about France or capitals,
 not "New chat".
 
-The title is written by the small `qwen3:0.6b` model, on purpose — using
-the big one would make you wait twice for the first answer.
+The title is written by whatever is behind the `fast` nickname — a small
+quick model, on purpose. Using the big one would make you wait twice for
+the first answer.
 
 ---
 

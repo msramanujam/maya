@@ -1,38 +1,33 @@
 # LibreChat configuration. Mounted read-only at /app/librechat.yaml and
 # referenced by CONFIG_PATH; see compose.yaml.
 #
-# One endpoint: the host's Ollama, spoken to over its OpenAI-compatible
-# /v1 API. Phase 3 replaces the baseURL below with LiteLLM's and this
-# file barely changes — which is the point of not talking to Ollama's
-# native API here.
+# One endpoint: the gateway. LibreChat asks for an alias and does not
+# know or care what is behind it — swapping a model is an edit to
+# config/litellm/config.yaml and a restart of that container alone. No
+# concrete model name belongs in this file; CLAUDE.md makes it a
+# rejected PR, and scripts/check phase3 enforces it.
 
 version: 1.2.8
 cache: true
 
 endpoints:
   custom:
-    - name: "Ollama"
-      # Ollama ignores the key entirely, but the OpenAI client insists on
-      # one. It comes from the environment so that nothing key-shaped
-      # ever sits in a committed file, dummy or not.
-      apiKey: "${OLLAMA_API_KEY}"
-      # host.docker.internal, not localhost: Ollama runs natively on the
-      # host because Docker on macOS has no GPU passthrough.
-      baseURL: "http://host.docker.internal:11434/v1"
+    - name: "Maya"
+      # The gateway's master key, from the environment. Same value every
+      # consumer presents; never a literal in a committed file.
+      apiKey: "${LITELLM_MASTER_KEY}"
+      # LiteLLM on maya-internal. Previously Ollama directly — this line
+      # is the whole of what Phase 3 changed here.
+      baseURL: "http://maya-litellm:4000/v1"
       models:
-        # Discovered from /v1/models at runtime, never hand-listed —
-        # pulling a new model with `ollama pull` is enough to see it in
-        # the picker.
+        # Discovered from the gateway, so adding an alias there is enough
+        # to see it in the picker.
         fetch: true
-        # Which model a new conversation opens on, not the list of what
-        # is available. LibreChat's schema rejects an empty array here
-        # ("Array must contain at least 1 element(s)"), so one name is
-        # unavoidable; fetch above still supplies the picker. Phase 3
-        # replaces this with the `general` alias.
-        default: ["orcarouter/Qwen3.8-27B-Uncensored:q8_0"]
+        # Which alias a new conversation opens on. LibreChat's schema
+        # rejects an empty array here, so one name is unavoidable — but
+        # it is an alias, not a model.
+        default: ["general"]
       titleConvo: true
-      # Titling every conversation on the 27B would block the first
-      # response behind a second cold load. The 0.6b is there precisely
-      # for this kind of utility work.
-      titleModel: "qwen3:0.6b"
-      modelDisplayLabel: "Ollama"
+      # Titling goes to the small model, whatever `fast` currently is.
+      titleModel: "fast"
+      modelDisplayLabel: "Maya"

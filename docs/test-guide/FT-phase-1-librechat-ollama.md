@@ -32,22 +32,26 @@ Paste:
 **Fail:** you see `Failed to connect` or `Connection refused`. Ollama is
 not running — start the Ollama app and try again.
 
-### Step 1.2 — Ollama is not locked to this Mac only
+### Step 1.2 — Ollama is not open to your network
 
 Paste:
 
     lsof -nP -iTCP:11434 -sTCP:LISTEN
 
-**Pass:** the last part of the line reads `*:11434`.
+**Pass:** the last part of the line reads `127.0.0.1:11434`.
 
-**Fail:** it reads `127.0.0.1:11434`. That means Ollama is still locked
-to this Mac only and containers cannot reach it. Fix it with:
+**Fail:** it reads `*:11434` or an address starting with `192.168` or
+`100.`. That means the models are answering to your whole network. Fix
+it with:
 
-    launchctl setenv OLLAMA_HOST 0.0.0.0:11434
+    launchctl unsetenv OLLAMA_HOST
 
-then quit the Ollama app (click the menu-bar icon → Quit) and open it
-again, and repeat this step. Note: this needs redoing after every
-restart of the Mac.
+then quit the Ollama app (click the menu-bar icon → Quit), open it
+again, and repeat this step.
+
+`127.0.0.1` means "this Mac only". Maya's containers still reach the
+models through it — that is step 1.3 — but nothing else on your Wi-Fi
+can.
 
 ### Step 1.3 — A container can reach the models
 
@@ -65,27 +69,26 @@ Paste:
 If you see `Cannot connect to the Docker daemon`, Docker/OrbStack is not
 running; start it and try again.
 
-### Step 1.4 — Know what you have opened up
+### Step 1.4 — Nobody else can reach the models
 
-There is nothing to fix here — this step just shows you the current
-state, so it holds no surprises.
+Find this Mac's address on your network:
 
-Paste:
+    ipconfig getifaddr en0
 
-    /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
+Then try to reach the models at that address — substitute the number it
+printed:
 
-Expect: `Firewall is disabled. (State = 0)`.
+    curl -m 5 http://192.168.1.23:11434/api/tags
 
-**This is on purpose.** Steps 1.2 and 1.3 opened the models to your
-whole local network, and the macOS firewall was deliberately left off in
-front of it. Until Phase 2 lands, anyone on the same Wi-Fi — home,
-office, or a shared network — can list these models and chat with them,
-with no password. Nothing else on this Mac is opened up: only the model
-port.
+**Pass:** it fails — "Failed to connect" or "Could not connect to
+server" after a few seconds.
 
-If you want that closed before Phase 2, ask for it and it takes a
-minute. The reasoning and both fixes are written down in
-`docs/PHASES.md` under "Host Ollama bind".
+**Fail:** a wall of text listing the models. That means anyone on the
+same Wi-Fi can use them. Go back to step 1.2.
+
+Maya deliberately keeps the models to this Mac. Reaching them from
+another device is what Phase 2 is for, over your private Tailscale
+network rather than the local Wi-Fi.
 
 ---
 
@@ -294,11 +297,14 @@ To see what a loaded model is using, paste:
 reads 262144, the setting was lost — this happens after restarting the
 Mac. Fix with:
 
-    launchctl setenv OLLAMA_CONTEXT_LENGTH 32768
+    cd ~/Dev/maya && ./scripts/install-host-env
 
 then quit the Ollama app from the menu bar and open it again. An empty
 list just means no model is loaded right now; send a chat message and
 run it again.
+
+That command installs a small login item so the setting comes back by
+itself after a restart. You should only ever need to run it once.
 
 **Worth knowing.** That setting is a memory trade. At 32768 the big model
 occupies about 31 GB while loaded; at its maximum of 262144 it takes

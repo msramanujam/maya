@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Install the LaunchAgent that sets Ollama's environment at login.
+#
+# Usage: scripts/install-host-env [--uninstall]
+#
+# Without this, `launchctl setenv` is lost on every reboot and Ollama
+# comes back at its full 262144 context — 46 GB resident instead of 31 GB.
+# See docs/PHASES.md, "Narrow the Ollama bind".
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+LABEL="com.maya.ollama-env"
+SRC="config/launchd/$LABEL.plist"
+DEST="$HOME/Library/LaunchAgents/$LABEL.plist"
+
+if [ "${1:-}" = "--uninstall" ]; then
+  launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+  rm -f "$DEST"
+  launchctl unsetenv OLLAMA_CONTEXT_LENGTH
+  echo "removed $DEST and unset OLLAMA_CONTEXT_LENGTH"
+  echo "restart the Ollama app for it to take effect"
+  exit 0
+fi
+
+mkdir -p "$HOME/Library/LaunchAgents"
+cp "$SRC" "$DEST"
+
+# bootout first: bootstrap fails on an already-loaded label, and this
+# script has to be safe to re-run after editing the plist.
+launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$DEST"
+
+echo "installed $DEST"
+
+# bootstrap returns before RunAtLoad has finished, so reporting the value
+# immediately shows it still unset and reads as a failed install.
+for _ in $(seq 1 20); do
+  [ -n "$(launchctl getenv OLLAMA_CONTEXT_LENGTH)" ] && break
+  sleep 0.2
+done
+echo "OLLAMA_CONTEXT_LENGTH is now: '$(launchctl getenv OLLAMA_CONTEXT_LENGTH)'"
+echo
+echo "Restart the Ollama app for a running server to pick this up."

@@ -71,24 +71,20 @@ check_prereqs() {
 check_phase1() {
   head_ "Phase 1 — LibreChat + Ollama"
 
-  # -- story #9: host Ollama bind ----------------------------------------
-  # A loopback-only listener refuses connections arriving on any other
-  # interface, so containers get connection-refused on
-  # host.docker.internal. Phase 2 narrows the bind to the tailnet address
-  # plus the container bridge — both non-loopback, so this assertion
-  # still holds afterwards.
-  # awk, not grep: `grep` here may be ugrep, whose -q -v exits 1 on input
-  # that BSD/GNU grep exits 0 on. Do not reintroduce grep -qv.
-  local listen nonloop
-  listen=$(lsof -nP -iTCP:11434 -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $(NF-1)}')
-  nonloop=$(printf '%s\n' "$listen" \
-    | awk 'NF && $0 !~ /^127\.0\.0\.1:/ && $0 !~ /^\[::1\]:/' | tr '\n' ' ')
-  if [ -z "$listen" ]; then
-    bad "no listener on TCP 11434"
-  elif [ -n "${nonloop// /}" ]; then
-    ok "ollama listener not loopback-only ($nonloop)"
+  # -- story #9, superseded by #23 ---------------------------------------
+  # #9 asserted the opposite of what is here now. It assumed a
+  # loopback-bound Ollama is unreachable from containers, and bound
+  # 0.0.0.0 to fix it. On OrbStack that premise is false: container
+  # traffic to host.docker.internal (0.250.250.254) arrives on the host
+  # as 127.0.0.1 -> 127.0.0.1:11434, so loopback was always enough. What
+  # matters for Phase 1 is reachability, asserted below and from inside
+  # LibreChat further down; the bind *shape* is now a Phase 2 concern.
+  local listen
+  listen=$(lsof -nP -iTCP:11434 -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $(NF-1)}' | tr '\n' ' ')
+  if [ -n "${listen// /}" ]; then
+    ok "ollama listening ($listen)"
   else
-    bad "ollama bound to loopback only ($(printf '%s' "$listen" | tr '\n' ' ')) — containers cannot reach it; see docs/PHASES.md"
+    bad "no listener on TCP 11434"
   fi
 
   # The check that actually catches the loopback bind: reach the host
@@ -287,12 +283,66 @@ check_phase1() {
   esac
 }
 
+# --------------------------------------------------------------- phase 2
+# Added by the Phase 2 stories. Still to cover:
+#   - caddy terminating TLS on the tailnet address
+#   - the MagicDNS URL loading from a second device
+check_phase2() {
+  head_ "Phase 2 — Remote access"
+
+  # -- story #23: Ollama not reachable off this host ----------------------
+  # #9 opened 11434 to the LAN, knowingly. It turned out to be
+  # unnecessary — see the note in check_phase1 — so the exposure is
+  # closed rather than narrowed. Anything but loopback here means the
+  # models are answering to something other than this machine.
+  local listen offhost
+  listen=$(lsof -nP -iTCP:11434 -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $(NF-1)}')
+  offhost=$(printf '%s\n' "$listen" \
+    | awk 'NF && $0 !~ /^127\.0\.0\.1:/ && $0 !~ /^\[::1\]:/' | tr '\n' ' ')
+  if [ -z "${listen// /}" ]; then
+    bad "no listener on TCP 11434"
+  elif [ -z "${offhost// /}" ]; then
+    ok "ollama bound to loopback only ($(printf '%s' "$listen" | tr '\n' ' '))"
+  else
+    bad "ollama reachable beyond this host on $offhost — run scripts/install-host-env and restart Ollama"
+  fi
+
+  # Belt and braces: the bind shape says what should happen, this says
+  # what does. A LAN address that answers is the failure #23 exists to
+  # prevent.
+  local lan
+  lan=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)
+  if [ -z "$lan" ]; then
+    ok "no LAN address to test against (offline)"
+  elif curl -fsS -m 5 -o /dev/null "http://$lan:11434/api/tags" 2>/dev/null; then
+    bad "ollama answers on the LAN address $lan:11434 — the models are open to this network"
+  else
+    ok "ollama refuses connections on the LAN address ($lan:11434)"
+  fi
+
+  # -- story #23: host settings survive a reboot --------------------------
+  # launchctl setenv is lost on reboot, and Ollama reads its environment
+  # at launch, so a revert is silent: 46 GB resident instead of 31 GB,
+  # with nothing to announce it.
+  local label agent
+  label="com.maya.ollama-env"
+  agent="$HOME/Library/LaunchAgents/$label.plist"
+  if [ ! -f "$agent" ]; then
+    bad "$label is not installed — run scripts/install-host-env"
+  elif launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
+    ok "$label installed and loaded"
+  else
+    bad "$label exists at $agent but is not loaded — run scripts/install-host-env"
+  fi
+}
+
 # ------------------------------------------------------------------- main
 section="${1:-all}"
 case "$section" in
   prereqs) check_prereqs ;;
   phase1)  check_phase1 ;;
-  all)     check_prereqs; check_phase1 ;;
+  phase2)  check_phase2 ;;
+  all)     check_prereqs; check_phase1; check_phase2 ;;
   *)       echo "unknown section: $section"; exit 2 ;;
 esac
 

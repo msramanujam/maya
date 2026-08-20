@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sets the Ollama environment for the GUI login session.
+
+  `launchctl setenv` does not survive a reboot, and Ollama.app reads its
+  environment when it launches, so without this the context window
+  silently reverts to the model's full 262144 — 46 GB resident instead of
+  31 GB, with nothing to announce it. scripts/check phase1 catches the
+  revert; this is what stops it happening.
+
+  OLLAMA_HOST is deliberately not set. Ollama's own default is
+  127.0.0.1:11434, which is what we want: containers reach it through
+  OrbStack's host.docker.internal proxy, which arrives on loopback, and
+  nothing on the LAN can reach it at all.
+
+  Install with scripts/install-host-env.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.maya.ollama-env</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>-c</string>
+        <string>launchctl setenv OLLAMA_CONTEXT_LENGTH 32768</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>

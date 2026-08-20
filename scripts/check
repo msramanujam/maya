@@ -444,6 +444,35 @@ check_phase3() {
     bad "gateway aliases are '$aliases', expected '$want'"
   fi
 
+  # -- story #28: no concrete model name outside the gateway config -------
+  # The names are read out of config/litellm/config.yaml rather than
+  # hard-coded here, so this keeps working when the models change — and
+  # it fails the moment a name leaks back into a caller.
+  #
+  # Scoped to configuration and code. docs/ legitimately names models
+  # when recording what was measured: a build log that cannot say which
+  # model took 46 GB is worth less than one that can.
+  local names leaks
+  names=$(awk '/^ *model: /{sub(/^ *model: */,""); sub(/^[a-z_]*\//,""); print}' \
+            config/litellm/config.yaml 2>/dev/null | sort -u)
+  if [ -z "$names" ]; then
+    bad "could not read model names from config/litellm/config.yaml"
+  else
+    leaks=""
+    while IFS= read -r n; do
+      [ -z "$n" ] && continue
+      local hits
+      hits=$(grep -rlF "$n" config scripts compose.yaml .env.example 2>/dev/null \
+             | grep -v '^config/litellm/config.yaml$' | tr '\n' ' ')
+      [ -n "${hits// /}" ] && leaks="$leaks $n->[${hits% }]"
+    done <<< "$names"
+    if [ -z "$leaks" ]; then
+      ok "no concrete model name outside config/litellm/config.yaml ($(printf '%s' "$names" | tr '\n' ' '))"
+    else
+      bad "concrete model name(s) leaked outside the gateway config:$leaks"
+    fi
+  fi
+
   local pubs
   pubs=$(docker compose --profile gateway ps --format '{{.Names}} {{.Publishers}}' 2>/dev/null | awk '/maya-litellm/')
   if printf '%s\n' "$pubs" | awk '/\{[0-9.]+ / {found=1} END {exit !found}'; then

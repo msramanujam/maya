@@ -1,0 +1,14 @@
+# Secrets — never committed
+.env
+.env.*
+!.env.example
+config/**/*.secret.*
+
+# Runtime state — container volumes
+data/
+
+# macOS
+.DS_Store
+
+# Claude Code local overrides
+.claude/settings.local.json

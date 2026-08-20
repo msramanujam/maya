@@ -126,3 +126,34 @@ gitignored; `.env.example` carries key names, the generating command, and
 placeholder shapes only.
 
 Deferred: nothing new.
+
+### Registration closed (story #15)
+
+Pulled forward from Phase 2. Phase 1 shipped `ALLOW_REGISTRATION=true`
+so a first account could be created; that account exists, so the window
+was closed rather than left open until the Caddy and Tailscale work.
+
+`POST /api/auth/register` now answers `403 {"message":"Registration is
+not allowed."}` and writes no row. Existing accounts are unaffected —
+the flag gates signup, not login.
+
+**`docker compose restart` does not re-read `env_file`.** Flipping the
+flag and restarting looked like it worked: the container came back
+healthy, and registration still succeeded, because the container kept
+its original environment (`docker exec maya-librechat env` still read
+`ALLOW_REGISTRATION=true`). Only `scripts/maya up`, which recreates the
+container, applies a changed `.env`. This is silent in both directions,
+so `scripts/check` probes the running endpoint rather than reading
+`.env` — the file agreeing with intent proves nothing.
+
+The probe uses a throwaway address and, if registration turns out to be
+open, deletes the row it just created and reports FAIL. Verified both
+ways: with the flag off, `registration refused (403)`; with it on
+temporarily, `registration is OPEN (200); probe user removed` and
+`db.users` back to one.
+
+Remote access stays deferred to Phase 2 in full — Tailscale is already
+running on this host (`madhu-m3-mpb`, `100.92.97.39`), but nothing binds
+to it yet, and LibreChat is still `127.0.0.1` only.
+
+Deferred: nothing new.

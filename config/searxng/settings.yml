@@ -1,0 +1,37 @@
+# SearXNG for Maya. Reached only from inside maya-internal; no host port.
+#
+# JSON is off in stock SearXNG and is the entire reason this exists here
+# — a tool cannot parse the HTML UI. See docs/PHASES.md.
+
+use_default_settings: true
+
+server:
+  # Not a credential in the usual sense, but it signs session data, so it
+  # comes from the environment rather than sitting in this file.
+  secret_key: "${SEARXNG_SECRET}"
+  limiter: false            # no public traffic to rate-limit
+  image_proxy: false
+
+search:
+  # html is kept so a human can open it for debugging; json is what the
+  # tool uses.
+  formats:
+    - html
+    - json
+  safe_search: 0
+  autocomplete: ""
+
+ui:
+  static_use_hash: true
+
+# Trimmed to engines that answer without an API key and return useful
+# snippets. Adding one is a config edit here, not a code change.
+engines:
+  - name: wikipedia
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: brave
+    disabled: false
+  - name: startpage
+    disabled: false

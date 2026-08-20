@@ -2,7 +2,7 @@
 gh_issue: 3
 gh_type: feature
 parent: EP-maya-v1
-status: proposed
+status: ready
 phase: 2
 spec:
 ---
@@ -42,3 +42,9 @@ Public internet exposure of any kind. Multi-user accounts. SSO.
    refused, and so is `curl http://<LAN-IP>:11434/api/tags`.
 4. Registering a new account through the UI is rejected.
 5. `scripts/check phase2` passes and covers criteria 3 and 4.
+
+## Stories
+
+- `ST-tailscale-cert-and-cli` (#21)
+- `ST-caddy-edge-tls` (#22)
+- `ST-narrow-ollama-bind` (#23)

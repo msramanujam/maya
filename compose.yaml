@@ -75,6 +75,12 @@ services:
       # them — slow, and broken entirely without a network.
       - ./data/librechat/cache-uv:/home/node/.cache/uv
       - ./data/librechat/cache-npm:/home/node/.npm
+      # The filesystem tool's entire world. Two named directories, both
+      # read-only at the mount, so the MCP server's own path checks are
+      # not the only thing between the model and the disk. Never the home
+      # directory itself, never the host root.
+      - ${HOME}/Documents:/documents:ro
+      - ${HOME}/Dev:/projects:ro
     # Still both, even though this service no longer publishes anything.
     # maya-internal is where Mongo and Caddy reach it; maya-edge is the
     # only network here with a route off the host, and Ollama lives on

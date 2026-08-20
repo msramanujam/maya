@@ -49,3 +49,17 @@ mcpServers:
     args: ["mcp-server-time", "--local-timezone=America/Los_Angeles"]
     timeout: 60000
 
+  # Two directories, nothing else. The server is told exactly these
+  # paths, and the mounts behind them are read-only at the container
+  # level — belt and braces, because a path check is a line of code and a
+  # read-only mount is the kernel.
+  filesystem:
+    type: stdio
+    command: npx
+    args:
+      - "-y"
+      - "@modelcontextprotocol/server-filesystem"
+      - "/documents"
+      - "/projects"
+    timeout: 60000
+

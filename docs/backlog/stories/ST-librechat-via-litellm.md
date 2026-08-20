@@ -2,7 +2,7 @@
 gh_issue: 28
 gh_type: story
 parent: FT-phase-3-litellm-gateway
-status: in-progress
+status: done
 phase: 3
 spec:
 ---

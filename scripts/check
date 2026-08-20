@@ -761,6 +761,44 @@ for m in bad_: print("BAD|" + m + " " + json.dumps(d))
   fi
 }
 
+# --------------------------------------------------------------- phase 6
+check_phase6() {
+  head_ "Phase 6 — Browser"
+
+  # -- story #49: the browser is contained --------------------------------
+  # This is the one service that runs untrusted content by design, so the
+  # mount and port assertions matter more here than anywhere else.
+  local bmounts bpubs
+  bmounts=$(docker inspect maya-browser \
+    -f '{{range .Mounts}}{{.Source}}->{{.Destination}} {{end}}' 2>/dev/null)
+  case "$bmounts" in
+    *"$HOME/Documents"*|*"$HOME/Dev"*|*/var/run/docker.sock*)
+      bad "browser has host mounts it must not have: $bmounts" ;;
+    *)
+      ok "browser has no host filesystem mounts${bmounts:+ beyond its own volume}" ;;
+  esac
+
+  bpubs=$(docker compose --profile browser ps --format '{{.Names}} {{.Publishers}}' 2>/dev/null | awk '/maya-browser/')
+  if printf '%s\n' "$bpubs" | awk '/\{[0-9.]+ / {found=1} END {exit !found}'; then
+    bad "maya-browser publishes a host port: $bpubs"
+  else
+    ok "maya-browser publishes nothing"
+  fi
+
+  # It renders. A browser that connects but cannot open a page is the
+  # failure mode here — the container reported healthy for a full build
+  # while Chromium was the wrong revision.
+  local nav
+  nav=$(docker exec -i maya-librechat python3 - \
+          http://maya-browser:8931/mcp browser_navigate '{"url":"https://example.com"}' \
+          < scripts/lib/mcp-http-call.py 2>/dev/null | head -c 400)
+  if printf '%s' "$nav" | grep -q '^OK'; then
+    ok "browser navigates and returns a page snapshot"
+  else
+    bad "browser could not navigate: $(printf '%s' "$nav" | head -c 160)"
+  fi
+}
+
 # ------------------------------------------------------------------- main
 section="${1:-all}"
 case "$section" in
@@ -770,7 +808,8 @@ case "$section" in
   phase3)  check_phase3 ;;
   phase4)  check_phase4 ;;
   phase5)  check_phase5 ;;
-  all)     check_prereqs; check_phase1; check_phase2; check_phase3; check_phase4; check_phase5 ;;
+  phase6)  check_phase6 ;;
+  all)     check_prereqs; check_phase1; check_phase2; check_phase3; check_phase4; check_phase5; check_phase6 ;;
   *)       echo "unknown section: $section"; exit 2 ;;
 esac
 

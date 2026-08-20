@@ -990,3 +990,56 @@ failure message were command-substituted by bash, so the message read
 
 Deferred: caching fetched pages, and any index over them.
 
+## Phase 6 — Browser
+
+### Playwright as the last resort (story #49)
+
+Its own container on the `browser` profile, built from
+`mcp/browser/Dockerfile`, speaking streamable HTTP on 8931 over
+`maya-internal`. Not a subprocess of LibreChat like the other servers:
+Playwright's Chromium is glibc-only and that image is Alpine/musl. Its
+own container is the better shape anyway — this is the one service that
+runs untrusted content by design, and it gets no host mounts at all.
+
+**Four failures, each of which reported success:**
+
+*Wrong Chromium.* The image installed browsers with
+`npx playwright@latest install`, while `@playwright/mcp` pins
+`1.56.0-alpha`. Different revision, so `/ms-playwright` held a Chromium
+the server would not use. The container reported **healthy** through a
+whole build cycle and failed only at call time with "Browser specified in
+your config is not installed". Browsers are now installed with the MCP
+package's own Playwright.
+
+*Host check.* Playwright MCP refuses any host but the one it bound to,
+answering `403 Access is only allowed at localhost:8931`. LibreChat
+reported that as a successful connection with `Capabilities: undefined`
+and `Tools: undefined` — a connection that is not a connection.
+`--allowed-hosts` names the internal address explicitly rather than `*`.
+
+*Domain policy.* LibreChat refuses MCP URLs on private hosts:
+`Domain "http://maya-browser:8931" is not allowed`. `mcpSettings.allowed
+Addresses` names the exact host:port — narrow on purpose, so this cannot
+become a way to reach any internal service.
+
+*State inside the writable tree.* The first version bind-mounted
+`./data/browser`, which lives inside `~/Dev` — the directory mounted
+read-write into LibreChat as `/projects`. Browser state would have sat
+in the tree the model can write to. It is a named volume now, and the
+check fails on any host mount at all.
+
+Verified: `https://quotes.toscrape.com/js/` — a JavaScript-rendered page
+`web_fetch` returns 52 characters for — renders with its quotes through
+the browser, and a two-step navigation followed "Next" to
+`/js/page/2/` with different content.
+
+`shm_size: 1gb`, because Chromium crashes on anything complex with the
+default 64MB.
+
+The tool descriptions position the browser as the expensive option and
+`web_fetch` as the default. Whether the model honours that is criterion 3
+and needs a human watching which tool it picks.
+
+Deferred: credential storage for authenticated sites, and headful
+browsing.
+

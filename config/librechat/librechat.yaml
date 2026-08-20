@@ -51,6 +51,17 @@ modelSpecs:
         endpoint: "agents"
         agent_id: "${MAYA_AGENT_ID}"
 
+# LibreChat refuses MCP URLs on private hosts unless they are named here —
+# `Domain "http://maya-browser:8931" is not allowed`. The whole stack is
+# private, so the browser has to be allowed explicitly. Narrow on purpose:
+# an exact host:port, not a wildcard, so this cannot become a way for any
+# internal service to be reached.
+mcpSettings:
+  allowedAddresses:
+    - "maya-browser:8931"
+  allowedDomains:
+    - "maya-browser"
+
 # Tool layer. Servers run as stdio subprocesses of this container: no
 # prebuilt MCP images were reachable, and the alternative — handing a
 # container the Docker socket so it can start them — is a rejected PR
@@ -118,4 +129,14 @@ mcpServers:
     timeout: 120000
     env:
       SEARXNG_URL: "http://maya-searxng:8080"
+
+  # The last resort, and described as one. A real browser is slow and
+  # heavy next to web_fetch, and a model given both will reach for the
+  # browser constantly unless the descriptions say plainly when it is
+  # warranted. Its own container over HTTP — not a subprocess — because
+  # Playwright's Chromium is glibc-only and this image is musl.
+  browser:
+    type: streamable-http
+    url: "http://maya-browser:8931/mcp"
+    timeout: 180000
 

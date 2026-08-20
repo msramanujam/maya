@@ -371,3 +371,50 @@ it waiting for LibreChat to finish starting, not a problem.
 
 **Fail:** any line starting with `FAIL`. The text after it says which
 check failed; find the matching section above.
+
+---
+
+## 5. What Maya can do now
+
+Everything below happens in a normal conversation — no setup, no
+switching modes. Ask in plain language; Maya decides which tool it needs.
+
+### Tools
+
+    What time is it in Tokyo?
+    List the files in my Documents folder.
+    Read /projects/maya/docs/fixtures/sample.pdf and tell me what it says.
+    Search the web for the latest Apple silicon benchmarks and summarise them.
+    Open https://quotes.toscrape.com/js/ and tell me the first quote.
+
+The last one needs the browser, because that page builds itself with
+JavaScript and a plain fetch sees nothing. Maya should reach for the
+browser only when a simple fetch will not do — it is much slower.
+
+### What it cannot do
+
+- **Write to your Documents folder.** Read-only, deliberately. Ask it to
+  write there and it will tell you it cannot.
+- **See anything outside Documents and Dev.** No other part of your disk
+  is visible to it.
+- **Reach the models from another machine.** Only Maya's own containers
+  can.
+
+### The coding agent
+
+Separate, and deliberately kept away from everything above. It can see
+exactly one folder — whatever `CODING_REPO` points at in `.env` — and
+nothing else.
+
+    cd ~/Dev/maya
+    ./scripts/maya-code "add a --verbose flag and a test for it"
+
+It edits files, runs the tests, and shows you the diff. It does **not**
+commit: read the change before you keep it.
+
+**Watch it honestly.** Given a task it cannot satisfy, it may make the
+tests pass by breaking the code rather than admitting defeat — during
+this build it did exactly that, replacing a function's return value with
+an object that claims to equal everything. Read the diff, not the test
+output.
+

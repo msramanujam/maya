@@ -612,3 +612,43 @@ concrete name. `scripts/check`: 31 passed, 0 failed, after a full
 
 Deferred: nothing new.
 
+### Single-file bind mounts (bug #32)
+
+`/app/librechat.yaml` did not exist inside `maya-librechat` while
+`docker inspect` still listed the mount and the container was healthy.
+
+A single-file bind mount binds an **inode**. Git does not edit in place —
+it writes and renames — so `checkout`, `pull` and merges all replace it,
+leaving the mount pointing at a file that no longer exists. Merging #30
+and pulling `main` is what did it. Caddy and LiteLLM were mounted the
+same way and had escaped only because their files had not been rewritten
+since those containers started.
+
+The failure is silent: LibreChat read its config at startup and kept
+serving from memory. Nothing breaks until the next restart, which is the
+worst moment to find out.
+
+All three services now mount the containing directory read-only.
+Demonstrated with `git stash` / `git stash pop` while the stack ran —
+the inode changed both times (`200336797` → `200336988` → `200337004`)
+and the container read the new content each time.
+
+`scripts/check` now reads each config from inside its container.
+`docker inspect` would have called this mount healthy, which is the
+lesson: a declared mount is not a live one.
+
+Two smaller things learned here:
+
+`docker compose --profile edge stop caddy` fails with `service "caddy"
+depends on undefined service "librechat": invalid compose project` — a
+`depends_on` across profiles means every command needs the full active
+profile set, not just the one owning the service. `scripts/maya` always
+passes the whole set; ad-hoc commands must too.
+
+And a negative test that greps for the wrong wording reports a pass. The
+first attempt at verifying this check grepped for "config file" while the
+failure says "cannot read their config", and separately had not actually
+stopped the container. Both looked like success.
+
+Deferred: nothing new.
+

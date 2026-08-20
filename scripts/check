@@ -236,6 +236,28 @@ check_phase1() {
     bad "LibreChat UI not answering at $MAYA_URL (is Tailscale up? is the edge profile running?)"
   fi
 
+  # -- bug #32: every container can actually read its config --------------
+  # `docker inspect` listing a mount proves nothing. A single-file bind
+  # mount binds an inode, and git replaces inodes rather than editing in
+  # place, so a checkout or pull silently detaches one — the running
+  # container keeps serving from memory and only fails on its next
+  # restart. Read the file from inside instead.
+  local svc path unreadable=""
+  for svc in \
+    "maya-librechat:/app/librechat-config/librechat.yaml" \
+    "maya-caddy:/etc/caddy/conf/Caddyfile" \
+    "maya-litellm:/app/litellm-config/config.yaml"
+  do
+    path="${svc#*:}"
+    docker exec "${svc%%:*}" sh -c "head -c1 '$path' >/dev/null 2>&1" 2>/dev/null \
+      || unreadable="$unreadable ${svc%%:*}:$path"
+  done
+  if [ -z "$unreadable" ]; then
+    ok "every container can read its own config file"
+  else
+    bad "container(s) cannot read their config:$unreadable (mount detached — scripts/maya up)"
+  fi
+
   # -- story #11: Ollama endpoint ----------------------------------------
   # From inside LibreChat itself, over the exact URL its config uses. The
   # story-#9 check above proves a container can reach the host; this
@@ -260,7 +282,7 @@ check_phase1() {
   # Comments stripped first — a commented-out `fetch: true` must not
   # satisfy this, and a bare regex over the file happily matches one.
   cfgfetch=$(docker exec maya-librechat node -e \
-    "const y=require('fs').readFileSync('/app/librechat.yaml','utf8'); process.stdout.write(y.split('\n').map(l=>l.replace(/#.*\$/,'')).some(l=>/^\s*fetch:\s*true\s*\$/.test(l))?'yes':'no')" \
+    "const y=require('fs').readFileSync('/app/librechat-config/librechat.yaml','utf8'); process.stdout.write(y.split('\n').map(l=>l.replace(/#.*\$/,'')).some(l=>/^\s*fetch:\s*true\s*\$/.test(l))?'yes':'no')" \
     2>/dev/null)
   upstream_n=$(printf '%s' "$lcmodels" | awk -F, 'NF{print NF}')
   if [ "$cfgfetch" = yes ] && [ "${upstream_n:-0}" -ge 2 ]; then

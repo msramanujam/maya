@@ -12,7 +12,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-MAYA_PROFILES="${MAYA_PROFILES:-core}"
+MAYA_PROFILES="${MAYA_PROFILES:-core edge}"
 
 if [ ! -f .env ]; then
   echo "no .env — copy .env.example and fill it in:" >&2
@@ -36,7 +36,8 @@ case "$cmd" in
     # Bind mounts, so the host directories must exist first or Docker
     # creates them as root-owned.
     mkdir -p data/mongo data/librechat/images data/librechat/uploads \
-             data/librechat/logs
+             data/librechat/logs data/caddy/data data/caddy/config \
+             data/tailscale
     compose up -d "$@"
     compose ps
     ;;

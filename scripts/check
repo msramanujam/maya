@@ -16,6 +16,11 @@ HEALTH_WAIT="${HEALTH_WAIT:-90}"
 # The context window Ollama is expected to load models at, set on the
 # host as OLLAMA_CONTEXT_LENGTH. See docs/PHASES.md for what it costs.
 NUM_CTX="${NUM_CTX:-32768}"
+
+# Where Maya answers. From Phase 2 this is the tailnet MagicDNS name over
+# HTTPS — LibreChat no longer publishes a port of its own, so there is no
+# 127.0.0.1:3080 to fall back to.
+MAYA_URL="${MAYA_URL:-https://madhu-m3-mpb.tailadf0a2.ts.net}"
 ok()   { printf '  PASS  %s\n' "$1"; PASS=$((PASS+1)); }
 bad()  { printf '  FAIL  %s\n' "$1"; FAIL=$((FAIL+1)); }
 head_() { printf '\n== %s ==\n' "$1"; }
@@ -146,14 +151,22 @@ check_phase1() {
     bad "compose config failed: $(printf '%s' "$cfg" | tr '\n' ' ')"
   fi
 
-  # Exactly two containers on the core profile, both up.
-  local running
+  # Both core services running. Deliberately not "exactly these two":
+  # `docker compose ps` lists every running container in the project
+  # regardless of the --profile filter, so once Phase 2's edge is up this
+  # would fail on Caddy's presence. What belongs to the edge is asserted
+  # in check_phase2.
+  local running missing
   running=$(docker compose --profile core ps --status running \
               --format '{{.Names}}' 2>/dev/null | awk 'NF' | sort | tr '\n' ' ')
-  if [ "$running" = "maya-librechat maya-mongo " ]; then
-    ok "core profile running: $running"
+  missing=""
+  for c in maya-mongo maya-librechat; do
+    case " $running " in *" $c "*) ;; *) missing="$missing $c" ;; esac
+  done
+  if [ -z "$missing" ]; then
+    ok "core services running (${running% })"
   else
-    bad "core profile expected 'maya-librechat maya-mongo', got '${running:-nothing}' (scripts/maya up)"
+    bad "core services not running:$missing (scripts/maya up)"
   fi
 
   # Health, not just running — a container that is up but unhealthy is a
@@ -201,10 +214,13 @@ check_phase1() {
   else
     ok "maya-mongo publishes nothing"
   fi
-  if printf '%s\n' "$pubs" | awk '/maya-librechat/ && /\{127\.0\.0\.1 3080 3080/ {found=1} END {exit !found}'; then
-    ok "maya-librechat publishes 127.0.0.1:3080 only"
+  # Phase 2 took publishing away from LibreChat and gave it to Caddy —
+  # this asserted 127.0.0.1:3080 until then. The edge's own binding is
+  # asserted in check_phase2.
+  if printf '%s\n' "$pubs" | awk '/maya-librechat/ && /\{[0-9.]+ / {found=1} END {exit !found}'; then
+    bad "maya-librechat publishes a host port: $(printf '%s' "$pubs" | tr '\n' ' ')"
   else
-    bad "maya-librechat is not publishing on 127.0.0.1:3080: $(printf '%s' "$pubs" | tr '\n' ' ')"
+    ok "maya-librechat publishes nothing"
   fi
   if printf '%s\n' "$pubs" | awk '/\{0\.0\.0\.0 / {found=1} END {exit !found}'; then
     bad "a container publishes on 0.0.0.0: $(printf '%s' "$pubs" | tr '\n' ' ')"
@@ -212,11 +228,12 @@ check_phase1() {
     ok "no container publishes on 0.0.0.0"
   fi
 
-  # The UI itself, not just the container state.
-  if curl -fsS -m 10 -o /dev/null http://127.0.0.1:3080/ 2>/dev/null; then
-    ok "LibreChat UI answering on http://127.0.0.1:3080"
+  # The UI itself, not just the container state — through the edge, since
+  # that is now the only way in.
+  if curl -fsS -m 10 -o /dev/null "$MAYA_URL/" 2>/dev/null; then
+    ok "LibreChat UI answering at $MAYA_URL"
   else
-    bad "LibreChat UI not answering on http://127.0.0.1:3080"
+    bad "LibreChat UI not answering at $MAYA_URL (is Tailscale up? is the edge profile running?)"
   fi
 
   # -- story #11: Ollama endpoint ----------------------------------------
@@ -262,7 +279,7 @@ check_phase1() {
   local probe code
   probe="maya-check-probe@invalid.test"
   code=$(curl -sS -m 15 -o /dev/null -w '%{http_code}' \
-           -X POST http://127.0.0.1:3080/api/auth/register \
+           -X POST "$MAYA_URL/api/auth/register" \
            -H 'Content-Type: application/json' \
            -d "{\"name\":\"Maya Check\",\"username\":\"mayacheckprobe\",\"email\":\"$probe\",\"password\":\"Nx7!probe-pass-42\",\"confirm_password\":\"Nx7!probe-pass-42\"}" \
            2>/dev/null || echo 000)
@@ -275,7 +292,7 @@ check_phase1() {
       bad "registration is OPEN (POST /api/auth/register -> $code); probe user removed. Set ALLOW_REGISTRATION=false in .env and run 'scripts/maya up' — not 'restart'"
       ;;
     000)
-      bad "registration probe got no response from http://127.0.0.1:3080/api/auth/register"
+      bad "registration probe got no response from $MAYA_URL/api/auth/register"
       ;;
     *)
       ok "registration refused (POST /api/auth/register -> $code)"
@@ -312,6 +329,45 @@ check_phase2() {
       else
         ok "tailnet certificate valid until $(openssl x509 -in "$crt" -noout -enddate | cut -d= -f2)"
       fi
+    fi
+  fi
+
+  # -- story #22: the edge ------------------------------------------------
+  # Exactly one service publishes, on the tailnet address, and nothing on
+  # 0.0.0.0 or the LAN address. This is the assertion that keeps Maya off
+  # every network but the tailnet.
+  local epubs ts_ip lan_ip
+  epubs=$(docker compose --profile core --profile edge ps --format '{{.Names}} {{.Publishers}}' 2>/dev/null)
+  ts_ip=$(tailscale ip -4 2>/dev/null | head -1)
+  if [ -z "$ts_ip" ]; then
+    bad "no tailscale IPv4 address — is Tailscale running?"
+  elif printf '%s\n' "$epubs" | awk -v ip="$ts_ip" '$0 ~ "maya-caddy" && index($0, "{" ip " 443 443") {found=1} END {exit !found}'; then
+    ok "maya-caddy publishes $ts_ip:443 only"
+  else
+    bad "maya-caddy is not publishing on $ts_ip:443: $(printf '%s' "$epubs" | tr '\n' ' ')"
+  fi
+
+  # The edge answering over TLS with a certificate curl itself accepts —
+  # not just a listener on the port.
+  if curl -fsS -m 15 -o /dev/null "$MAYA_URL/" 2>/dev/null; then
+    ok "edge serves $MAYA_URL with a trusted certificate"
+  else
+    bad "edge not serving $MAYA_URL (or the certificate is not trusted)"
+  fi
+
+  # The LAN must get nothing at all — neither the old LibreChat port nor
+  # the edge's.
+  lan_ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)
+  if [ -z "$lan_ip" ]; then
+    ok "no LAN address to test the edge against (offline)"
+  else
+    local leaked=""
+    curl -fsS -m 5 -o /dev/null "http://$lan_ip:3080/" 2>/dev/null && leaked="$leaked $lan_ip:3080"
+    curl -fsSk -m 5 -o /dev/null "https://$lan_ip:443/" 2>/dev/null && leaked="$leaked $lan_ip:443"
+    if [ -n "$leaked" ]; then
+      bad "reachable from the LAN on:$leaked"
+    else
+      ok "nothing answers on the LAN address ($lan_ip:3080, :443)"
     fi
   fi
 

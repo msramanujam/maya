@@ -148,6 +148,31 @@ services:
       retries: 5
       start_period: 30s
 
+  browser:
+    build:
+      context: ./mcp/browser
+    image: maya-playwright-mcp:local
+    container_name: maya-browser
+    profiles: [browser]
+    restart: unless-stopped
+    # No ports and, deliberately, no host mounts of any kind — this is the
+    # one service that runs untrusted content by design. A named volume,
+    # not ./data/browser: that path lives inside ~/Dev, which is mounted
+    # read-write into LibreChat as /projects, so a bind mount would put
+    # browser state inside the tree the model can write to.
+    volumes:
+      - browser-state:/data
+    networks: [maya-internal, maya-edge]
+    # Chromium needs more than the default 64MB of shared memory or it
+    # crashes on pages with any real complexity.
+    shm_size: 1gb
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:8931/sse').then(()=>process.exit(0)).catch(()=>process.exit(1))\""]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   caddy:
     image: caddy:2-alpine
     container_name: maya-caddy
@@ -175,6 +200,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  # The browser's own state, deliberately outside the repo — see the
+  # comment on the service.
+  browser-state:
+    name: maya-browser-state
 
 networks:
   # Service-to-service only: no route off the host, no published ports.

@@ -31,3 +31,21 @@ endpoints:
       # Titling goes to the small model, whatever `fast` currently is.
       titleModel: "fast"
       modelDisplayLabel: "Maya"
+
+# Tool layer. Servers run as stdio subprocesses of this container: no
+# prebuilt MCP images were reachable, and the alternative — handing a
+# container the Docker socket so it can start them — is a rejected PR
+# under CLAUDE.md.
+#
+# Package caches are mounted (see compose.yaml) so a restart does not
+# re-download a server.
+mcpServers:
+  # Deliberately trivial, and deliberately first. This proves the whole
+  # loop — advertised, chosen, executed, returned, reasoned over — before
+  # any capability that touches the host is attached to it.
+  time:
+    type: stdio
+    command: uvx
+    args: ["mcp-server-time", "--local-timezone=America/Los_Angeles"]
+    timeout: 60000
+

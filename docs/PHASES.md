@@ -721,3 +721,37 @@ Carried forward:
 | `coding` and `reasoning` are the general model with different temperatures | Phase 7, which gives `coding` a real model |
 | LiteLLM has no database, virtual keys or usage tracking | Needing per-consumer keys or usage attribution |
 
+## Phase 4 — MCP and filesystem
+
+In progress. Sections are appended by each story as it lands.
+
+### The MCP loop (story #35)
+
+One trivial tool first, deliberately: a time server, proving advertised →
+chosen → executed → returned → reasoned over, before anything that
+touches the host is attached to the same interface.
+
+**Servers run as stdio subprocesses of the LibreChat container.** No
+prebuilt MCP image was reachable from here (`mcp/time`, `mcp/filesystem`,
+`mcp-proxy`, `supergateway` all absent), and the usual alternative —
+giving a container the Docker socket so it can start them — is a rejected
+PR under CLAUDE.md. The LibreChat image ships `node`, `npx`, `uvx` and
+`python3`, and this is LibreChat's own documented arrangement. The
+consequence is that the filesystem mounts land on the LibreChat
+container, which is acceptable: explicit named mounts, read-only, no home
+directory, no socket.
+
+Package caches are mounted at `data/librechat/cache-uv` and
+`cache-npm`. Without them every restart re-downloads the server. With
+them, MCP initialisation went **9314ms → 345ms**, and
+`UV_OFFLINE=1 uvx mcp-server-time` runs from the cache with no network.
+
+`scripts/check` speaks MCP to the server itself
+(`scripts/lib/mcp-probe.py`, piped into the container's `python3`) rather
+than reading LibreChat's startup log. A server that starts but advertises
+nothing looks identical, from the model's side, to one that is not there
+— and log format is not an interface. Negative-tested against a
+non-existent package: empty output, which fails.
+
+Deferred: nothing new.
+

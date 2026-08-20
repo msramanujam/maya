@@ -70,6 +70,11 @@ services:
       - ./data/librechat/images:/app/client/public/images
       - ./data/librechat/uploads:/app/uploads
       - ./data/librechat/logs:/app/api/logs
+      # MCP servers are stdio subprocesses of this container, fetched by
+      # uvx/npx on first use. Without these, every restart re-downloads
+      # them — slow, and broken entirely without a network.
+      - ./data/librechat/cache-uv:/home/node/.cache/uv
+      - ./data/librechat/cache-npm:/home/node/.npm
     # Still both, even though this service no longer publishes anything.
     # maya-internal is where Mongo and Caddy reach it; maya-edge is the
     # only network here with a route off the host, and Ollama lives on

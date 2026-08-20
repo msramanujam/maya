@@ -55,14 +55,47 @@ check_prereqs() {
   fi
 }
 
-# --------------------------------------------------------- phase 1 (stub)
-# Added by the Phase 1 stories. Must verify at minimum:
+# --------------------------------------------------------------- phase 1
+# Added by the Phase 1 stories. Still to cover:
 #   - librechat and mongo containers healthy
-#   - container -> host: curl http://host.docker.internal:11434/v1/models
 #   - only 127.0.0.1-bound ports published
 check_phase1() {
   head_ "Phase 1 — LibreChat + Ollama"
-  echo "  (no checks yet — added by the Phase 1 stories)"
+
+  # -- story #9: host Ollama bind ----------------------------------------
+  # A loopback-only listener refuses connections arriving on any other
+  # interface, so containers get connection-refused on
+  # host.docker.internal. Phase 2 narrows the bind to the tailnet address
+  # plus the container bridge — both non-loopback, so this assertion
+  # still holds afterwards.
+  # awk, not grep: `grep` here may be ugrep, whose -q -v exits 1 on input
+  # that BSD/GNU grep exits 0 on. Do not reintroduce grep -qv.
+  local listen nonloop
+  listen=$(lsof -nP -iTCP:11434 -sTCP:LISTEN 2>/dev/null | awk 'NR>1 {print $(NF-1)}')
+  nonloop=$(printf '%s\n' "$listen" \
+    | awk 'NF && $0 !~ /^127\.0\.0\.1:/ && $0 !~ /^\[::1\]:/' | tr '\n' ' ')
+  if [ -z "$listen" ]; then
+    bad "no listener on TCP 11434"
+  elif [ -n "${nonloop// /}" ]; then
+    ok "ollama listener not loopback-only ($nonloop)"
+  else
+    bad "ollama bound to loopback only ($(printf '%s' "$listen" | tr '\n' ' ')) — containers cannot reach it; see docs/PHASES.md"
+  fi
+
+  # The check that actually catches the loopback bind: reach the host
+  # from inside a container, the way every later phase will.
+  local models n
+  if models=$(docker run --rm curlimages/curl:latest -fsS -m 10 \
+                http://host.docker.internal:11434/v1/models 2>/dev/null); then
+    n=$(printf '%s' "$models" | grep -o '"id"' | wc -l | tr -d ' ')
+    if [ "$n" -gt 0 ]; then
+      ok "container -> host.docker.internal:11434/v1/models ($n model(s))"
+    else
+      bad "container reached 11434 but the model list came back empty"
+    fi
+  else
+    bad "container cannot reach http://host.docker.internal:11434/v1/models"
+  fi
 }
 
 # ------------------------------------------------------------------- main

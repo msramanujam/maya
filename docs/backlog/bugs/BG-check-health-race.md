@@ -2,7 +2,7 @@
 gh_issue: 17
 gh_type: bug
 parent: FT-phase-1-librechat-ollama
-status: in-progress
+status: done
 phase: 1
 spec:
 ---

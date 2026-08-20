@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Drive the coding agent against its one repository.
+#
+# Usage: scripts/maya-code "add punctuation stripping to slugify"
+#        scripts/maya-code --shell          # a prompt inside the container
+#
+# The agent sees exactly the repository named by CODING_REPO in .env and
+# nothing else — no /documents, no /projects, no home directory. It runs
+# the test command after each edit and iterates on failures.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+TEST_CMD="${MAYA_TEST_CMD:-python -m pytest -q}"
+
+if [ "${1:-}" = "--shell" ]; then
+  exec docker compose --profile coding exec coding bash
+fi
+
+[ $# -gt 0 ] || { echo "usage: scripts/maya-code \"what to change\"" >&2; exit 2; }
+
+exec docker compose --profile coding exec coding \
+  aider --no-git --yes-always \
+        --test-cmd "$TEST_CMD" --auto-test \
+        --message "$*"

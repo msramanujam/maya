@@ -173,6 +173,33 @@ services:
       retries: 5
       start_period: 30s
 
+  coding:
+    build:
+      context: ./mcp/coding
+    image: maya-aider:local
+    container_name: maya-coding
+    profiles: [coding]
+    restart: unless-stopped
+    # Exactly one mount, and it is not /documents, not /projects, and not
+    # the home directory. The agent edits code and runs commands, so the
+    # blast radius is whatever it can see — and that is one repository,
+    # named explicitly in .env.
+    volumes:
+      - ${CODING_REPO}:/repo
+    environment:
+      # The gateway, by alias. Which model serves `coding` is decided in
+      # config/litellm/config.yaml and nowhere else.
+      OPENAI_API_BASE: http://maya-litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+      AIDER_MODEL: openai/coding
+      AIDER_WEAK_MODEL: openai/fast
+      AIDER_YES_ALWAYS: "true"
+      AIDER_AUTO_COMMITS: "false"
+      AIDER_GITIGNORE: "false"
+    # No ports, no socket. maya-internal only: it needs the gateway, and
+    # nothing else needs it.
+    networks: [maya-internal]
+
   caddy:
     image: caddy:2-alpine
     container_name: maya-caddy

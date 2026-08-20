@@ -34,12 +34,12 @@ model_list:
       temperature: 0.3
       timeout: 120
 
-  # Phase 7 gives this its own model. Until then it is the general model
-  # with a colder temperature — the alias exists so callers can be
-  # written against it now.
+  # A coding-specialised model as of Phase 7. Nothing outside this file
+  # changed to make that happen — the agent asks for `coding` and always
+  # did. Pointing this at a larger variant is one more edit here.
   - model_name: coding
     litellm_params:
-      model: ollama_chat/orcarouter/Qwen3.8-27B-Uncensored:q8_0
+      model: ollama_chat/qwen2.5-coder:7b
       api_base: http://host.docker.internal:11434
       num_ctx: 32768
       temperature: 0.2

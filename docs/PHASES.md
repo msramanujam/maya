@@ -692,3 +692,32 @@ stopped the container. Both looked like success.
 
 Deferred: nothing new.
 
+### Phase 3 closed
+
+All six feature criteria met. LibreChat asks the gateway for an alias and
+knows nothing about what serves it. `scripts/check`: 33 passed, 0 failed.
+
+The swap is the feature and it is demonstrated, not asserted: `fast`
+moved from the 0.6b to the 27B with one line changed in
+`config/litellm/config.yaml` and one container restarted, while
+LibreChat's container was never touched.
+
+Two defects surfaced during the phase, both filed rather than quietly
+patched:
+
+- **#31**, the cold-load hang. The gateway was the obvious suspect and
+  was innocent — 3.33s through it against 3.27s direct.
+- **#32**, single-file bind mounts detaching on any git operation. Found
+  because a check read the config from inside the container instead of
+  trusting `docker inspect`.
+
+Carried forward:
+
+| Caveat | Trigger to revisit |
+|---|---|
+| 31 GB held resident permanently by `OLLAMA_KEEP_ALIVE=-1` | Wanting that memory for something else |
+| First model load after a reboot is still minutes | The wait becoming a complaint on its own |
+| `num_ctx` is set in two places — the gateway config and `OLLAMA_CONTEXT_LENGTH` | Changing either; they must move together |
+| `coding` and `reasoning` are the general model with different temperatures | Phase 7, which gives `coding` a real model |
+| LiteLLM has no database, virtual keys or usage tracking | Needing per-consumer keys or usage attribution |
+

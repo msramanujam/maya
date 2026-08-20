@@ -788,3 +788,26 @@ background task output, unread.
 
 Deferred: nothing new.
 
+### Write access to /projects (story #37)
+
+`~/Dev -> /projects` is now read-write; `~/Documents -> /documents` stays
+read-only. The model may read what you wrote and write only where you
+asked it to.
+
+Both halves are asserted, and the write is proven by looking on the host
+rather than trusting the server's "Successfully wrote to ...". A tool
+reporting success is a claim; the file existing is the fact.
+
+Verified: a write under `/projects` appears at the expected host path
+with the expected content; a write to `/documents` still fails with
+`EROFS` and leaves nothing behind.
+
+Worth knowing for anyone driving these tools by hand: `zsh` does not
+word-split unquoted parameter expansions the way `bash` does, so
+`-- $FS_CMD` passes the whole command as a single argument and the server
+never starts. `scripts/check` runs under `bash`, where it splits as
+intended; an interactive `zsh` needs the words written out.
+
+Deferred: a deletion policy, and write access to `/documents` — the
+latter not in this phase at all.
+

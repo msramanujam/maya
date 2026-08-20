@@ -585,14 +585,31 @@ check_phase4() {
     bad "forbidden mount(s):$bad_mounts"
   fi
 
-  # /documents read-only at the mount, not merely by the server's own rules.
-  local docro
+  # -- story #37: the asymmetry -------------------------------------------
+  # /documents read-only, /projects writable — and both asserted, so a
+  # change that widens either fails the run rather than being noticed
+  # later by its consequences.
+  local docro projrw
   docro=$(docker inspect maya-librechat \
             -f '{{range .Mounts}}{{if eq .Destination "/documents"}}{{.RW}}{{end}}{{end}}' 2>/dev/null)
-  if [ "$docro" = false ]; then
-    ok "/documents is mounted read-only"
+  projrw=$(docker inspect maya-librechat \
+            -f '{{range .Mounts}}{{if eq .Destination "/projects"}}{{.RW}}{{end}}{{end}}' 2>/dev/null)
+  if [ "$docro" = false ] && [ "$projrw" = true ]; then
+    ok "/documents read-only, /projects writable"
   else
-    bad "/documents mount RW=$docro, expected false"
+    bad "mount modes wrong: /documents RW=$docro (want false), /projects RW=$projrw (want true)"
+  fi
+
+  # The write actually reaching the host, not just the server saying so.
+  local probe_rel="maya/data/maya-check-write-probe.txt"
+  docker exec -i maya-librechat python3 - \
+    write_file "{\"path\":\"/projects/$probe_rel\",\"content\":\"maya-check\"}" \
+    -- $FS_CMD < scripts/lib/mcp-call.py >/dev/null 2>&1
+  if [ -f "$HOME/Dev/$probe_rel" ]; then
+    ok "write to /projects lands on the host"
+    rm -f "$HOME/Dev/$probe_rel"
+  else
+    bad "write to /projects did not reach $HOME/Dev/$probe_rel"
   fi
 }
 

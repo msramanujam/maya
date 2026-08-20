@@ -80,7 +80,11 @@ services:
       # not the only thing between the model and the disk. Never the home
       # directory itself, never the host root.
       - ${HOME}/Documents:/documents:ro
-      - ${HOME}/Dev:/projects:ro
+      # Read-write, promoted deliberately in story #37. /documents stays
+      # ro: the model may read what you wrote, and write only where you
+      # asked it to. The asymmetry is asserted in scripts/check, so a
+      # future change that quietly widens it fails the run.
+      - ${HOME}/Dev:/projects
     # Still both, even though this service no longer publishes anything.
     # maya-internal is where Mongo and Caddy reach it; maya-edge is the
     # only network here with a route off the host, and Ollama lives on

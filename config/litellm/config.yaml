@@ -1,0 +1,61 @@
+# The one file in this repo allowed to name a concrete model.
+#
+# Everything else — LibreChat, MCP agents, the coding agent — asks for an
+# alias. Swapping what a model is means editing here and restarting this
+# container alone; no caller changes. That is the whole point of the
+# gateway, and CLAUDE.md makes it a rejected PR to break it.
+#
+# api_base is host.docker.internal: Ollama runs natively on the host,
+# because Docker on macOS has no GPU passthrough.
+#
+# ollama_chat/, not ollama/: the former speaks Ollama's /api/chat, which
+# handles multi-turn conversations and tool calls properly. The latter
+# uses the older completion endpoint.
+
+model_list:
+  # Day-to-day conversation. Vision and tool calling both live here.
+  - model_name: general
+    litellm_params:
+      model: ollama_chat/orcarouter/Qwen3.8-27B-Uncensored:q8_0
+      api_base: http://host.docker.internal:11434
+      # Matches OLLAMA_CONTEXT_LENGTH on the host — see docs/PHASES.md
+      # for what raising it costs in resident memory.
+      num_ctx: 32768
+      temperature: 0.7
+      timeout: 600
+
+  # Utility work: conversation titles, classification, anything that
+  # should not put a 27B cold load in front of the user.
+  - model_name: fast
+    litellm_params:
+      model: ollama_chat/qwen3:0.6b
+      api_base: http://host.docker.internal:11434
+      num_ctx: 32768
+      temperature: 0.3
+      timeout: 120
+
+  # Phase 7 gives this its own model. Until then it is the general model
+  # with a colder temperature — the alias exists so callers can be
+  # written against it now.
+  - model_name: coding
+    litellm_params:
+      model: ollama_chat/orcarouter/Qwen3.8-27B-Uncensored:q8_0
+      api_base: http://host.docker.internal:11434
+      num_ctx: 32768
+      temperature: 0.2
+      timeout: 900
+
+  # Same model, thinking enabled and given room to use it.
+  - model_name: reasoning
+    litellm_params:
+      model: ollama_chat/orcarouter/Qwen3.8-27B-Uncensored:q8_0
+      api_base: http://host.docker.internal:11434
+      num_ctx: 32768
+      temperature: 0.6
+      timeout: 900
+
+litellm_settings:
+  drop_params: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

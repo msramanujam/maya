@@ -418,13 +418,49 @@ check_phase2() {
   fi
 }
 
+# --------------------------------------------------------------- phase 3
+check_phase3() {
+  head_ "Phase 3 — LiteLLM gateway"
+
+  # -- story #27: the gateway ---------------------------------------------
+  local key aliases want
+  key=$(awk -F= '/^LITELLM_MASTER_KEY=/{sub(/^[^=]*=/,""); print; exit}' .env 2>/dev/null)
+  if [ -z "$key" ]; then
+    bad "LITELLM_MASTER_KEY not set in .env"
+    return
+  fi
+
+  # From a container on maya-internal, the way every consumer reaches it —
+  # there is no host port to curl.
+  aliases=$(docker run --rm --network maya-internal curlimages/curl:latest -sS -m 20 \
+              -H "Authorization: Bearer $key" http://maya-litellm:4000/v1/models 2>/dev/null \
+            | python3 -c 'import sys,json; print(",".join(sorted(m["id"] for m in json.load(sys.stdin)["data"])))' 2>/dev/null)
+  want="coding,fast,general,reasoning"
+  if [ -z "$aliases" ]; then
+    bad "LiteLLM did not answer /v1/models on maya-internal (scripts/maya up)"
+  elif [ "$aliases" = "$want" ]; then
+    ok "gateway serves exactly the four aliases ($aliases)"
+  else
+    bad "gateway aliases are '$aliases', expected '$want'"
+  fi
+
+  local pubs
+  pubs=$(docker compose --profile gateway ps --format '{{.Names}} {{.Publishers}}' 2>/dev/null | awk '/maya-litellm/')
+  if printf '%s\n' "$pubs" | awk '/\{[0-9.]+ / {found=1} END {exit !found}'; then
+    bad "maya-litellm publishes a host port: $pubs"
+  else
+    ok "maya-litellm publishes nothing"
+  fi
+}
+
 # ------------------------------------------------------------------- main
 section="${1:-all}"
 case "$section" in
   prereqs) check_prereqs ;;
   phase1)  check_phase1 ;;
   phase2)  check_phase2 ;;
-  all)     check_prereqs; check_phase1; check_phase2 ;;
+  phase3)  check_phase3 ;;
+  all)     check_prereqs; check_phase1; check_phase2; check_phase3 ;;
   *)       echo "unknown section: $section"; exit 2 ;;
 esac
 

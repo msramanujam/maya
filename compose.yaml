@@ -81,6 +81,28 @@ services:
       retries: 5
       start_period: 45s
 
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: maya-litellm
+    profiles: [gateway]
+    restart: unless-stopped
+    # No ports. Callers reach it on maya-internal by name.
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+    volumes:
+      - ./config/litellm/config.yaml:/app/config.yaml:ro
+    # maya-edge for the same reason LibreChat needs it: Ollama is on the
+    # host, and maya-internal has no gateway, so host.docker.internal
+    # does not resolve there. Membership is not permission to publish.
+    networks: [maya-internal, maya-edge]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=5).status==200 else 1)\""]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
   caddy:
     image: caddy:2-alpine
     container_name: maya-caddy

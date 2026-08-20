@@ -243,3 +243,60 @@ contents were confirmed once, by hand, with a throwaway account that was
 deleted afterwards.
 
 Deferred: nothing new.
+
+### Context window and persistence (story #12)
+
+    launchctl setenv OLLAMA_CONTEXT_LENGTH 32768
+    # then restart the Ollama app
+
+**The story's premise was wrong for this Ollama.** It assumed Ollama
+defaults the context far below the model's 262k. Version 0.32.14 does the
+opposite — it loads a model at its full advertised context. Measured on
+the 27B, same prompt, only the setting changed:
+
+| Context | Resident | Processor |
+|---|---|---|
+| 262144 (default) | 46 GB | 100% GPU |
+| 32768 (set) | 31 GB | 100% GPU |
+
+So the setting buys 15 GB rather than rescuing a truncated conversation.
+32768 stands as the deliberate starting point the story asked for, and
+raising it is now an informed decision: roughly 15 GB per 230k of context
+on this model, on a 128 GB machine.
+
+**`num_ctx` cannot come from `librechat.yaml`.** Ollama's
+OpenAI-compatible endpoint ignores it, both as a top-level body parameter
+and nested under `options` — verified by sending each and watching
+`ollama ps` still report 262144. The lever is the server-wide
+`OLLAMA_CONTEXT_LENGTH`, which is why this is a host setting like the
+bind in story #9, and carries the same reboot caveat: `launchctl setenv`
+does not survive one. `scripts/check` asserts both the variable and the
+context of any resident model, so a reboot that silently reverts it fails
+the run.
+
+Reading `ollama ps` from a script needs column offsets, not field
+numbers: `SIZE` is "31 GB" and `UNTIL` is "4 minutes from now", so
+`$(NF-3)` lands on a word of the timestamp. The first version of the
+check reported `context '3 '`.
+
+Recall verified at 12252 prompt tokens — three times the old 4096 default
+— with a passphrase in the opening message and 8k tokens of filler after
+it. The model returned `BRASS-LANTERN-47` and nothing else. Note the
+27B is a thinking model: with `max_tokens: 40` the answer came back
+empty, having spent the budget on reasoning. That is a real trap for
+anything scripting against it.
+
+Persistence across `scripts/maya down` + `up`: the conversation
+`334fed93` ("FRANCE CAPITALE") survived intact with both messages. The
+assistant's reply lives in `content[{type:"text"}]` and its `text` field
+is empty — the agents pipeline stores it that way, so a query reading
+`text` will wrongly conclude the history is gone.
+
+Revert:
+
+    launchctl unsetenv OLLAMA_CONTEXT_LENGTH
+    # restart the Ollama app; models return to 262144 and 46 GB
+
+Deferred: raising the context beyond 32768, and any summarization or
+compaction strategy. Trigger: a real conversation hitting the limit —
+log the conversation and what was lost here first.

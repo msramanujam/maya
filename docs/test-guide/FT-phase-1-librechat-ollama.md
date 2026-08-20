@@ -255,6 +255,77 @@ the big one would make you wait twice for the first answer.
 
 ---
 
+## 4. Memory, long chats, and restarts
+
+**What this proves.** Maya remembers the start of a long conversation,
+and nothing is lost when you stop and restart it.
+
+### Step 4.1 — A long conversation still remembers its beginning
+
+In a new chat, send a message that starts with a fact and then pads it
+out — paste a few pages of any text after it. Something like:
+
+    Remember this passphrase: BRASS-LANTERN-47.
+
+    <paste several pages of any text here>
+
+Send a second message:
+
+    What was the passphrase in my first message?
+
+**Pass:** it answers `BRASS-LANTERN-47`.
+
+**Fail:** it says it does not know, or invents a different passphrase.
+That means the conversation outgrew the memory window — see step 4.2.
+
+### Step 4.2 — How much conversation Maya holds
+
+Maya is set to hold about 32,000 tokens of conversation — very roughly
+24,000 words, or fifty pages. Past that, the oldest messages fall out of
+view and step 4.1 starts failing.
+
+To see what a loaded model is using, paste:
+
+    ollama ps
+
+**Pass:** the CONTEXT column reads `32768`.
+
+**Fail:** it reads `262144`, or the command prints only a header. If it
+reads 262144, the setting was lost — this happens after restarting the
+Mac. Fix with:
+
+    launchctl setenv OLLAMA_CONTEXT_LENGTH 32768
+
+then quit the Ollama app from the menu bar and open it again. An empty
+list just means no model is loaded right now; send a chat message and
+run it again.
+
+**Worth knowing.** That setting is a memory trade. At 32768 the big model
+occupies about 31 GB while loaded; at its maximum of 262144 it takes
+about 46 GB. Both fit on this machine. If you routinely hit the limit in
+step 4.1, it can be raised — the cost is roughly 15 GB for the full jump.
+
+### Step 4.3 — Nothing is lost on restart
+
+Note the title of a conversation in the left sidebar. Then paste:
+
+    cd ~/Dev/maya && ./scripts/maya down
+
+Wait for it to finish, then:
+
+    cd ~/Dev/maya && ./scripts/maya up
+
+Reload http://127.0.0.1:3080 and log in.
+
+**Pass:** the same conversation is in the sidebar, and opening it shows
+the whole exchange — your messages and the replies.
+
+**Fail:** the sidebar is empty, or the conversation opens blank. Stop and
+report it; conversations live in `data/mongo` and should survive any
+stop and start.
+
+---
+
 ## Everything at once
 
 To run every automated check in one go, paste:

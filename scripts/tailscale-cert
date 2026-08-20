@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Fetch (or renew) the tailnet TLS certificate for this host.
+#
+# Usage: scripts/tailscale-cert [domain]
+#
+# Certificates last 90 days. Our copy is a static file, so nothing renews
+# it on its own — re-run this. `scripts/check phase2` fails once fewer
+# than 14 days remain, which is the reminder.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+TS="${TAILSCALE_BIN:-/Applications/Tailscale.app/Contents/MacOS/Tailscale}"
+DEST="data/tailscale"
+
+command -v "$TS" >/dev/null 2>&1 || [ -x "$TS" ] || {
+  echo "tailscale CLI not found at $TS" >&2
+  echo "set TAILSCALE_BIN, or install the CLI" >&2
+  exit 1
+}
+
+# python, not sed: `tailscale status --json` is pretty-printed, so
+# CertDomains and its value land on different lines.
+DOMAIN="${1:-$("$TS" status --json | python3 -c 'import sys,json; d=json.load(sys.stdin).get("CertDomains") or [""]; print(d[0])')}"
+[ -n "$DOMAIN" ] || {
+  echo "no cert domain — enable HTTPS Certificates for this tailnet:" >&2
+  echo "    https://login.tailscale.com/admin/dns" >&2
+  exit 1
+}
+
+mkdir -p "$DEST"
+
+# Both to stdout, then split here, rather than letting the CLI write the
+# files: Tailscale.app is sandboxed and cannot create files under this
+# repo — it fails with "operation not permitted" on --cert-file.
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+"$TS" cert --cert-file - --key-file - "$DOMAIN" > "$tmp"
+
+python3 - "$tmp" "$DEST" "$DOMAIN" <<'PY'
+import sys, re, os, stat
+src, dest, domain = sys.argv[1], sys.argv[2], sys.argv[3]
+chunks = re.findall(r'-----BEGIN [A-Z ]+-----.*?-----END [A-Z ]+-----\n?', open(src).read(), re.S)
+certs = [c for c in chunks if 'CERTIFICATE' in c.split('\n')[0]]
+keys  = [c for c in chunks if 'PRIVATE KEY' in c.split('\n')[0]]
+if not certs or len(keys) != 1:
+    sys.exit(f"unexpected PEM: {len(certs)} cert block(s), {len(keys)} key block(s)")
+crt = os.path.join(dest, domain + '.crt')
+key = os.path.join(dest, domain + '.key')
+open(crt, 'w').write(''.join(certs))
+open(key, 'w').write(''.join(keys))
+os.chmod(key, stat.S_IRUSR | stat.S_IWUSR)          # 600 — the private key
+os.chmod(crt, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+print(f"wrote {crt}")
+print(f"wrote {key}")
+PY
+
+openssl x509 -in "$DEST/$DOMAIN.crt" -noout -subject -dates

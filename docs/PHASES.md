@@ -392,3 +392,42 @@ from the network, and the macOS application firewall is not needed for
 it.
 
 Deferred: nothing new.
+
+### Tailscale CLI and tailnet certificate (story #21)
+
+HTTPS certificates had to be enabled for the tailnet first — a one-time
+toggle at https://login.tailscale.com/admin/dns, not reachable from the
+CLI. Before it, `tailscale status --json` reported `CertDomains: null`
+and `tailscale cert` had no CA to ask.
+
+Certificate for `madhu-m3-mpb.tailadf0a2.ts.net`, issued by Let's
+Encrypt, valid **Aug 20 → Nov 18 2026**. Lives in `data/tailscale/`
+(gitignored), key at 0600, and the public key matches the certificate.
+
+**Two things fought back.**
+
+`tailscale cert --cert-file <path>` fails with `operation not permitted`
+for any path under this repo, and with `no such file or directory` for a
+relative one. Tailscale.app is sandboxed: it cannot create files here,
+and its working directory is not ours. `scripts/tailscale-cert` therefore
+asks for both PEMs on stdout (`--cert-file - --key-file -`) and splits
+them itself.
+
+A symlink to the CLI does not work. The binary derives its bundle
+identity from its own path, so `/opt/homebrew/bin/tailscale -> ...app/...`
+dies with `Fatal error: The current bundleIdentifier is unknown to the
+registry`. `config/host/tailscale-shim.sh` execs the real path instead,
+which keeps the binary where it expects to be.
+`/opt/homebrew/bin` is user-writable on Apple Silicon, so no sudo is
+needed — `scripts/install-host-env` installs both the shim and the
+LaunchAgent.
+
+**Renewal is manual.** Tailscale issues for 90 days and renews its own
+copy, but ours is a static file that nothing refreshes. Re-run
+`scripts/tailscale-cert`. `scripts/check phase2` fails once fewer than
+14 days remain, which is the only reminder there is — a certificate that
+silently expires takes Caddy down with it.
+
+Deferred: automating renewal. Trigger: the first time the check catches
+an expiry that should have been handled, or Caddy being restarted often
+enough that a stale file is likely.

@@ -2,7 +2,7 @@
 gh_issue: 46
 gh_type: story
 parent: FT-phase-5-search-fetch
-status: ready
+status: in-progress
 phase: 5
 spec:
 ---

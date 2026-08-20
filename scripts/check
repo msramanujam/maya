@@ -676,14 +676,80 @@ check_phase5() {
   # -- story #45: SearXNG --------------------------------------------------
   # JSON, not HTML: stock SearXNG serves only HTML, which a tool cannot
   # parse. Reached the way the tool reaches it, from maya-internal.
-  local n
-  n=$(docker run --rm --network maya-internal curlimages/curl:latest -sS -m 60 \
-        "http://maya-searxng:8080/search?q=apple+m3+max&format=json" 2>/dev/null \
-      | python3 -c 'import sys,json;print(len(json.load(sys.stdin).get("results",[])))' 2>/dev/null)
-  if [ "${n:-0}" -gt 0 ]; then
-    ok "searxng returns JSON results ($n)"
+  # Two things, separately: that SearXNG answers in JSON at all, and that
+  # something upstream actually replied. The second depends on public
+  # engines that rate-limit and serve CAPTCHAs under repeated automated
+  # queries and recover on their own — so when it fails, say which
+  # engines and why, rather than leaving someone to guess at the config.
+  local sx
+  sx=$(docker run --rm --network maya-internal curlimages/curl:latest -sS -m 90 \
+        "http://maya-searxng:8080/search?q=apple+m3+max&format=json" 2>/dev/null)
+  if [ -z "$sx" ]; then
+    bad "searxng did not answer on maya-internal (scripts/maya up)"
+  elif ! printf '%s' "$sx" | python3 -c 'import sys,json;json.load(sys.stdin)' 2>/dev/null; then
+    bad "searxng did not return JSON — is json in search.formats? (config/searxng/settings.yml)"
   else
-    bad "searxng returned no JSON results — is `json` in search.formats? (config/searxng/settings.yml)"
+    local n why
+    n=$(printf '%s' "$sx" | python3 -c 'import sys,json;print(len(json.load(sys.stdin).get("results",[])))')
+    if [ "${n:-0}" -gt 0 ]; then
+      ok "searxng returns JSON results ($n)"
+    else
+      why=$(printf '%s' "$sx" | python3 -c 'import sys,json;print("; ".join("%s: %s"%(e[0],e[1]) for e in json.load(sys.stdin).get("unresponsive_engines",[])[:6]) or "no reason given")')
+      bad "searxng answered but every engine came back empty — $why"
+    fi
+  fi
+
+  # -- story #46: the two tools --------------------------------------------
+  # Exercised in-process rather than through the MCP wrapper: this is
+  # about extraction quality, and the transport is already covered.
+  local web
+  web=$(docker exec maya-librechat sh -c 'uvx --with readability-lxml --with lxml_html_clean --with beautifulsoup4 python - <<'"'"'PYEOF'"'"'
+import sys, re, json
+sys.path.insert(0, "/app/mcp/web")
+import server
+out = {}
+try:
+    s = server.web_search("apple m3 max memory bandwidth", 3)
+    out["search_results"] = s.count("http")
+except Exception as e:
+    out["search_error"] = "%s: %s" % (type(e).__name__, e)
+try:
+    t = server.web_fetch("https://en.wikipedia.org/wiki/Apple_M3")
+    out["fetch_chars"] = len(t)
+    out["fetch_html"] = bool(re.search(r"<(p|div|span|script|a|li)\b", t))
+    out["fetch_navbox"] = "Cortex-A5" in t[:400]
+except Exception as e:
+    out["fetch_error"] = "%s: %s" % (type(e).__name__, e)
+try:
+    big = server.web_fetch("https://en.wikipedia.org/wiki/World_War_II")
+    out["cap_ok"] = len(big) <= server.MAX_CHARS + 400 and "[truncated at" in big
+except Exception as e:
+    out["cap_error"] = "%s: %s" % (type(e).__name__, e)
+print(json.dumps(out))
+PYEOF' 2>/dev/null | tail -1)
+
+  if [ -z "$web" ]; then
+    bad "web tools produced no output (is the web profile up?)"
+  else
+    local verdicts
+    verdicts=$(printf '%s' "$web" | python3 -c '
+import sys, json
+d = json.load(sys.stdin)
+ok, bad_ = [], []
+(ok if d.get("search_results", 0) > 0 else bad_).append("web_search returns URLs")
+(ok if d.get("fetch_chars", 0) > 500 and not d.get("fetch_html") and not d.get("fetch_navbox")
+   else bad_).append("web_fetch returns clean article text")
+(ok if d.get("cap_ok") else bad_).append("web_fetch truncates a very large page")
+for m in ok:  print("OK|" + m)
+for m in bad_: print("BAD|" + m + " " + json.dumps(d))
+' 2>/dev/null)
+    # Here-string, not a pipe: a `while read` on the right of a pipe runs
+    # in a subshell, so ok/bad increment counters that are thrown away —
+    # the assertions print and the run still reports success.
+    while IFS='|' read -r verdict msg; do
+      [ -z "$verdict" ] && continue
+      if [ "$verdict" = OK ]; then ok "$msg"; else bad "$msg"; fi
+    done <<< "$verdicts"
   fi
 
   local spubs

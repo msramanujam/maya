@@ -519,6 +519,25 @@ check_phase3() {
   fi
 }
 
+# --------------------------------------------------------------- phase 4
+check_phase4() {
+  head_ "Phase 4 — MCP and filesystem"
+
+  # -- story #35: the MCP loop --------------------------------------------
+  # Ask the server itself what it advertises, rather than reading
+  # LibreChat's startup log. A server that starts but advertises nothing
+  # looks identical, from the model's side, to one that is not there.
+  local tools
+  tools=$(docker exec -i maya-librechat python3 - \
+            uvx mcp-server-time --local-timezone=America/Los_Angeles \
+            < scripts/lib/mcp-probe.py 2>/dev/null | tr -d '\r')
+  if [ -n "$tools" ]; then
+    ok "MCP time server advertises tools ($tools)"
+  else
+    bad "MCP time server advertised no tools (docker compose logs librechat | grep MCP)"
+  fi
+}
+
 # ------------------------------------------------------------------- main
 section="${1:-all}"
 case "$section" in
@@ -526,7 +545,8 @@ case "$section" in
   phase1)  check_phase1 ;;
   phase2)  check_phase2 ;;
   phase3)  check_phase3 ;;
-  all)     check_prereqs; check_phase1; check_phase2; check_phase3 ;;
+  phase4)  check_phase4 ;;
+  all)     check_prereqs; check_phase1; check_phase2; check_phase3; check_phase4 ;;
   *)       echo "unknown section: $section"; exit 2 ;;
 esac
 

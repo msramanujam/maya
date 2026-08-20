@@ -37,7 +37,7 @@ case "$cmd" in
     # creates them as root-owned.
     mkdir -p data/mongo data/librechat/images data/librechat/uploads \
              data/librechat/logs data/caddy/data data/caddy/config \
-             data/tailscale
+             data/tailscale data/librechat/cache-uv data/librechat/cache-npm
     compose up -d "$@"
     compose ps
     ;;

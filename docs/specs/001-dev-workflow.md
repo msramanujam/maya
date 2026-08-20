@@ -61,11 +61,15 @@ criterion.
       --label type:story,status:proposed,phase:N
 
 Link it under its parent as a native sub-issue. The API takes the
-child's **database id**, not its issue number:
+child's **database id** — not its issue number, and not the GraphQL node
+id that `gh issue view --json id` returns. Get it from the REST endpoint:
 
-    child_id=$(gh issue view <child-number> --json id --jq .id)
+    child_id=$(gh api /repos/msramanujam/maya/issues/<child-number> --jq .id)
     gh api -X POST /repos/msramanujam/maya/issues/<parent-number>/sub_issues \
       -F sub_issue_id=$child_id
+
+Passing the node id fails with `Invalid property /sub_issue_id: ... is
+not of type integer` (HTTP 422).
 
 Then write the returned issue number into front-matter `gh_issue` and
 commit. Every issue body names its markdown path; every markdown file

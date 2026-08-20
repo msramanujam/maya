@@ -63,3 +63,21 @@ mcpServers:
       - "/projects"
     timeout: 60000
 
+  # Extraction, so the model can use the PDFs and spreadsheets it can
+  # already see. Ours rather than an off-the-shelf server: this image is
+  # Alpine/musl and every packaged extractor tried pulls native wheels
+  # built for glibc. See docs/PHASES.md.
+  extract:
+    type: stdio
+    command: uvx
+    args:
+      - "--with"
+      - "pypdf"
+      - "--with"
+      - "python-docx"
+      - "--with"
+      - "openpyxl"
+      - "python"
+      - "/app/mcp/extract/server.py"
+    timeout: 120000
+

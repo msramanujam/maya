@@ -2,7 +2,7 @@
 gh_issue: 38
 gh_type: story
 parent: FT-phase-4-mcp-filesystem
-status: ready
+status: in-progress
 phase: 4
 spec:
 ---

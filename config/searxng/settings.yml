@@ -24,9 +24,17 @@ search:
 ui:
   static_use_hash: true
 
-# Trimmed to engines that answer without an API key and return useful
-# snippets. Adding one is a config edit here, not a code change.
+# Note `use_default_settings: true` means this list *modifies* the default
+# engine set, it does not replace it — an easy thing to get wrong, and the
+# reason engines we never named were still being queried and failing.
+#
+# The ones disabled below returned errors or access-denied on every query
+# from this host. The rest are kept because aggregating several is what
+# makes a result set robust: individual engines rate-limit or serve a
+# CAPTCHA under repeated automated queries, and recover on their own.
 engines:
+  - name: bing
+    disabled: false
   - name: wikipedia
     disabled: false
   - name: duckduckgo
@@ -35,3 +43,9 @@ engines:
     disabled: false
   - name: startpage
     disabled: false
+  - name: mojeek
+    disabled: false
+  - name: aol
+    disabled: true
+  - name: karmasearch
+    disabled: true

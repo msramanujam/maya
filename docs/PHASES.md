@@ -932,3 +932,61 @@ results with titles and URLs.
 Deferred: caching search results, and any index over them — the standing
 RAG deferral covers the latter.
 
+### web_search and web_fetch (story #46)
+
+`mcp/web/server.py`, 250 lines. Two tools, deliberately: search returns
+titles, URLs and snippets so the model can *choose*; fetch returns one
+page. A single search-and-read tool makes a model pull ten pages when it
+needed one.
+
+Fetch is capped at 40,000 characters, and the truncation notice tells the
+model what to do about it — fetch a more specific URL, or search for the
+part it needs. An uncapped fetch is a context-window denial of service.
+
+**Three things a naive fetch gets wrong, all found by looking at the
+output rather than the exit code:**
+
+*Meta refresh.* `urllib` follows HTTP redirects and cannot see
+`<meta http-equiv="refresh">`. The Rust blog answered 200 with a "Click
+here to be redirected" stub — 95 characters that extract cleanly and mean
+nothing. Now followed, bounded to three hops.
+
+*Navigation that reads as content.* Readability scores by text density
+and happily kept a Wikipedia navbox: the extract opened
+`Application processors (32-bit) ARMv7-A Cortex-A5...`, a wall of link
+text. Structural elements and anything whose class says navbox, infobox,
+sidebar or menu are stripped first.
+
+*Stripping too much.* That filter then removed 232 elements from the same
+page and left an empty document, because Wikipedia's skin wraps
+everything in containers whose classes say "menu" and "navigation".
+Nothing whose text is more than 30% of the page is removed now — you can
+delete the furniture, never the room. Readability falls back to the raw
+document, and then to plain tag-stripping, so a hostile page degrades
+instead of erroring.
+
+Measured after all three: Wikipedia opens with `From Wikipedia, the free
+encyclopedia\nApple announced the M3 on...`, the Rust post extracts 5429
+characters of article, and World War II truncates at the cap.
+
+**Search depends on engines that push back.** Repeated automated queries
+earned `brave: Suspended: too many requests` and `duckduckgo: CAPTCHA`,
+and for a while only Bing answered. They recover on their own. Two
+consequences: the engine list is broader than needed so that aggregate
+results survive individual failures, and when the check does fail it
+prints which engines refused and why, rather than pointing at the config.
+
+Also worth knowing: `use_default_settings: true` means the `engines:`
+block *modifies* the default set rather than replacing it. Engines we
+never named were being queried and failing, which is why the first
+error list was full of unfamiliar names.
+
+Two mistakes of mine in the checks themselves, both the same shape as
+earlier ones. A `while read` on the right of a pipe runs in a subshell,
+so three assertions printed PASS and incremented counters that were
+discarded — the run reported success regardless. And backticks in a
+failure message were command-substituted by bash, so the message read
+"is  in search.formats?".
+
+Deferred: caching fetched pages, and any index over them.
+

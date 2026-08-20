@@ -100,3 +100,22 @@ mcpServers:
       - "/app/mcp/extract/server.py"
     timeout: 120000
 
+  # Discovery and retrieval, kept apart on purpose: one tool that
+  # searched and then read everything it found would pull ten pages when
+  # the model needed one, and fill the context doing it.
+  web:
+    type: stdio
+    command: uvx
+    args:
+      - "--with"
+      - "readability-lxml"
+      - "--with"
+      - "lxml_html_clean"
+      - "--with"
+      - "beautifulsoup4"
+      - "python"
+      - "/app/mcp/web/server.py"
+    timeout: 120000
+    env:
+      SEARXNG_URL: "http://maya-searxng:8080"
+

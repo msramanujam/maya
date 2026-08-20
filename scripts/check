@@ -536,6 +536,64 @@ check_phase4() {
   else
     bad "MCP time server advertised no tools (docker compose logs librechat | grep MCP)"
   fi
+
+  # -- story #36: the filesystem boundaries --------------------------------
+  local FS_CMD="npx -y @modelcontextprotocol/server-filesystem /documents /projects"
+
+  # A refused write, proven by attempting one. The mount saying `ro` and
+  # the server refusing are two different claims; this tests the second,
+  # and the host is checked afterwards in case both were wrong.
+  local w
+  w=$(docker exec -i maya-librechat python3 - \
+        write_file '{"path":"/documents/maya-check-probe.txt","content":"x"}' \
+        -- $FS_CMD < scripts/lib/mcp-call.py 2>/dev/null)
+  if printf '%s' "$w" | grep -q '^ERROR'; then
+    ok "write to /documents refused ($(printf '%s' "$w" | sed -n 's/.*"text": "\([^"]*\)".*/\1/p' | head -c 60))"
+  else
+    bad "write to /documents was NOT refused: $(printf '%s' "$w" | head -c 120)"
+  fi
+  if [ -e "$HOME/Documents/maya-check-probe.txt" ]; then
+    bad "the probe file reached $HOME/Documents — /documents is writable"
+    rm -f "$HOME/Documents/maya-check-probe.txt"
+  fi
+
+  # Nothing outside the two mounts, including via traversal.
+  local esc
+  esc=$(docker exec -i maya-librechat python3 - \
+          read_text_file '{"path":"/documents/../etc/passwd"}' \
+          -- $FS_CMD < scripts/lib/mcp-call.py 2>/dev/null)
+  if printf '%s' "$esc" | grep -q '^ERROR'; then
+    ok "path traversal out of /documents refused"
+  else
+    bad "path traversal escaped the mount: $(printf '%s' "$esc" | head -c 120)"
+  fi
+
+  # Mount hygiene across every container, not just the one with the tool.
+  local bad_mounts="" c src dst
+  for c in maya-librechat maya-caddy maya-litellm maya-mongo; do
+    while IFS='|' read -r src dst; do
+      [ -z "$src" ] && continue
+      case "$src" in
+        /var/run/docker.sock|/) bad_mounts="$bad_mounts $c:$src" ;;
+        "$HOME")                bad_mounts="$bad_mounts $c:$src" ;;
+      esac
+    done <<< "$(docker inspect "$c" -f '{{range .Mounts}}{{.Source}}|{{.Destination}}{{"\n"}}{{end}}' 2>/dev/null)"
+  done
+  if [ -z "$bad_mounts" ]; then
+    ok "no container mounts the home directory, host root, or Docker socket"
+  else
+    bad "forbidden mount(s):$bad_mounts"
+  fi
+
+  # /documents read-only at the mount, not merely by the server's own rules.
+  local docro
+  docro=$(docker inspect maya-librechat \
+            -f '{{range .Mounts}}{{if eq .Destination "/documents"}}{{.RW}}{{end}}{{end}}' 2>/dev/null)
+  if [ "$docro" = false ]; then
+    ok "/documents is mounted read-only"
+  else
+    bad "/documents mount RW=$docro, expected false"
+  fi
 }
 
 # ------------------------------------------------------------------- main

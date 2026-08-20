@@ -755,3 +755,36 @@ non-existent package: empty output, which fails.
 
 Deferred: nothing new.
 
+### Read-only filesystem access (story #36)
+
+`~/Documents -> /documents` and `~/Dev -> /projects`, both `ro` at the
+mount, and the MCP server told exactly those two paths. Two independent
+barriers on purpose: a path check is a line of code, a read-only mount is
+the kernel. Measured, the kernel is what actually refuses —
+`EROFS: read-only file system` — before the server's own rules matter.
+
+Verified: `/etc/passwd` denied, the LibreChat config denied,
+`/documents/../etc/passwd` denied after normalisation, and no container
+anywhere mounts the home directory, host root or Docker socket.
+
+**An hour lost to a wrong hypothesis, worth recording.** The first
+`list_directory` on `/documents` hung for over six minutes, and while it
+hung every new `docker exec` into that container queued behind it — so
+the container looked wedged, `docker top` included. The obvious
+explanation was macOS privacy protection on the Documents folder, and it
+was wrong. The mounts had worked the whole time: the backgrounded
+commands eventually returned full listings of both directories.
+
+The real cause was that each probe invoked
+`npx -y @modelcontextprotocol/server-filesystem`, and the first of those
+downloaded the package while further probes piled up behind it. Once
+cached, `ls /documents` and `ls /projects` are instantaneous.
+
+Two lessons. A hang whose first suspect is a permission system deserves
+one cheap test of the boring explanation — here, "is something
+downloading?" — before the exotic one. And backing the change out was
+premature: the evidence that the mounts worked was already sitting in the
+background task output, unread.
+
+Deferred: nothing new.
+

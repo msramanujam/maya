@@ -612,6 +612,46 @@ concrete name. `scripts/check`: 31 passed, 0 failed, after a full
 
 Deferred: nothing new.
 
+### Cold-load hang (bug #31)
+
+A chat answering in ~3 seconds warm took 270 seconds after a gap, then
+78 seconds a few minutes later, with no error and no progress shown. It
+read as a broken gateway. It was not:
+
+| Path | Warm | Cold, from page cache |
+|---|---|---|
+| Through LiteLLM | 3.33s | 6.99s |
+| Direct to Ollama | 3.27s | 6.33s |
+
+The gateway costs well under a second. The delay is Ollama unloading
+after five minutes idle and then reading 31 GB back — about 7 seconds
+when the file is still in the OS page cache, minutes when it is not,
+which is the case after a reboot or once memory pressure has evicted it.
+The 270-second reading was the first load after a full stack cycle.
+
+`OLLAMA_KEEP_ALIVE=-1` in the login agent keeps a model resident once
+loaded. `ollama ps` shows `UNTIL: Forever`. Verified by idling 341
+seconds — past the old window — and finding the model still resident, the
+next request answering in 7.5s, and zero reload events in Ollama's log
+across the gap.
+
+**The standing cost is 31 GB of the machine's 128 GB**, held whether or
+not anyone is chatting. That is the trade: memory that would otherwise
+sit unused, against a multi-minute stall on the first message after any
+quiet period.
+
+The very first load after a reboot is still slow — nothing here preloads
+a model, and the fix removes the repeat, not the first one.
+
+Two lessons worth keeping. A component that adds no measurable latency
+can still be blamed for a hang, so measure both paths before believing
+the new thing is at fault. And a wait with no feedback is
+indistinguishable from a failure: the user reported "hangs with no
+output", which is exactly what a silent 31 GB read looks like.
+
+Deferred: preloading a model at boot. Trigger: the first-load-after-
+reboot wait becoming a complaint in its own right.
+
 ### Single-file bind mounts (bug #32)
 
 `/app/librechat.yaml` did not exist inside `maya-librechat` while

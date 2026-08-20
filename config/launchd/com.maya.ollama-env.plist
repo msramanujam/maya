@@ -8,6 +8,12 @@
   31 GB, with nothing to announce it. scripts/check phase1 catches the
   revert; this is what stops it happening.
 
+  OLLAMA_KEEP_ALIVE=-1 keeps a model resident once loaded. The default
+  unloads after five minutes idle, and reloading the 27B means reading
+  31 GB back — about 7 seconds from the OS page cache, minutes from SSD.
+  The UI shows no progress while that happens, so it reads as a hang.
+  The cost is 31 GB standing on a 128 GB machine.
+
   OLLAMA_HOST is deliberately not set. Ollama's own default is
   127.0.0.1:11434, which is what we want: containers reach it through
   OrbStack's host.docker.internal proxy, which arrives on loopback, and
@@ -23,7 +29,7 @@
     <array>
         <string>/bin/sh</string>
         <string>-c</string>
-        <string>launchctl setenv OLLAMA_CONTEXT_LENGTH 32768</string>
+        <string>launchctl setenv OLLAMA_CONTEXT_LENGTH 32768; launchctl setenv OLLAMA_KEEP_ALIVE -1</string>
     </array>
     <key>RunAtLoad</key>
     <true/>

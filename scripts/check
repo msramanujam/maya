@@ -12,6 +12,10 @@ PASS=0; FAIL=0
 # failure. LibreChat cold-starts in ~45s; this is comfortably past that
 # without letting a genuinely stuck container hang the run.
 HEALTH_WAIT="${HEALTH_WAIT:-90}"
+
+# The context window Ollama is expected to load models at, set on the
+# host as OLLAMA_CONTEXT_LENGTH. See docs/PHASES.md for what it costs.
+NUM_CTX="${NUM_CTX:-32768}"
 ok()   { printf '  PASS  %s\n' "$1"; PASS=$((PASS+1)); }
 bad()  { printf '  FAIL  %s\n' "$1"; FAIL=$((FAIL+1)); }
 head_() { printf '\n== %s ==\n' "$1"; }
@@ -100,6 +104,38 @@ check_phase1() {
     fi
   else
     bad "container cannot reach http://host.docker.internal:11434/v1/models"
+  fi
+
+  # -- story #12: context window -----------------------------------------
+  # Ollama 0.32 loads a model at its full advertised context unless told
+  # otherwise — 262144 and 46 GB for the 27B here — so this is pinned
+  # deliberately rather than left to the default. launchctl setenv does
+  # not survive a reboot, which is exactly the regression this catches.
+  local ctx_env ctx_loaded
+  ctx_env=$(launchctl getenv OLLAMA_CONTEXT_LENGTH 2>/dev/null)
+  if [ "$ctx_env" = "$NUM_CTX" ]; then
+    ok "OLLAMA_CONTEXT_LENGTH is $NUM_CTX"
+  elif [ -z "$ctx_env" ]; then
+    bad "OLLAMA_CONTEXT_LENGTH unset — models will load at their full context (46 GB for the 27B). Run: launchctl setenv OLLAMA_CONTEXT_LENGTH $NUM_CTX, then restart the Ollama app"
+  else
+    bad "OLLAMA_CONTEXT_LENGTH is '$ctx_env', expected '$NUM_CTX' (see docs/PHASES.md)"
+  fi
+
+  # The environment variable only takes effect on models loaded after the
+  # Ollama app restarted, so check what is actually resident. Nothing
+  # loaded is not a failure — models unload on idle.
+  # Column offsets from the header, not field numbers: SIZE is "31 GB"
+  # and UNTIL is "4 minutes from now", so $(NF-n) lands on a word of the
+  # timestamp instead of the context.
+  ctx_loaded=$(ollama ps 2>/dev/null \
+    | awk 'NR==1{c=index($0,"CONTEXT"); next} NF && c {s=substr($0,c); split(s,a," "); print a[1]}' \
+    | sort -u | tr '\n' ' ')
+  if [ -z "${ctx_loaded// /}" ]; then
+    ok "no model resident (nothing to check against $NUM_CTX)"
+  elif [ "${ctx_loaded// /}" = "$NUM_CTX" ]; then
+    ok "resident model(s) loaded at $NUM_CTX"
+  else
+    bad "resident model(s) at context '${ctx_loaded}', expected $NUM_CTX — Ollama was not restarted after the variable changed"
   fi
 
   # -- story #10: compose scaffold ---------------------------------------

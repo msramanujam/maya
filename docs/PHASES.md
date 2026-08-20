@@ -845,3 +845,24 @@ config and `/documents/../etc/passwd` are both refused.
 Deferred: OCR of scanned images. The standing RAG deferral is unchanged —
 extraction is not indexing.
 
+### A postscript to bug #32
+
+Directory mounts fixed the *file*-replacement case, and immediately hit
+the directory-replacement one. Merging #38 and running `git checkout
+main` deleted `mcp/` — it did not exist on `main` yet — and the bind
+detached exactly as a single-file mount would, leaving
+`/app/mcp/extract/` missing inside a healthy container. `scripts/check`
+caught it: two extraction assertions failed.
+
+Recreating the container reattaches it, and it will not recur for this
+directory now that it exists on `main`. But the general rule is sharper
+than #32 concluded: **a bind mount holds an inode, and any git operation
+that removes or replaces that inode — file or directory — detaches it.**
+Adding a new mounted directory is therefore a recreate, not a restart,
+and the first branch switch after adding one will break the running
+stack.
+
+The check reading configs from inside the container is what makes this
+visible at all. `docker inspect` still lists the mount, and the container
+still reports healthy.
+

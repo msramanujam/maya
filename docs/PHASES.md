@@ -470,6 +470,14 @@ Measured: `https://madhu-m3-mpb.tailadf0a2.ts.net` answers 200 with
 `ssl_verify_result 0`, served cert `CN = madhu-m3-mpb.tailadf0a2.ts.net`
 from Let's Encrypt. Nothing answers on `192.168.50.144` at `:3080` or
 `:443`. `scripts/check`: 28 passed, 0 failed, after a full `down` + `up`,
-with conversations intact.
+with conversations intact. Reached from a phone over cellular with
+Tailscale on, and unreachable with it off.
+
+**Caddy cannot see real client addresses.** Every request logs
+`"client_ip": "192.168.156.1"` — the Docker gateway — because the
+published port is NAT'd by OrbStack before Caddy sees it. Requests are
+still distinguishable by user agent, which is how the phone's session was
+identified, but per-client attribution is not available. This matters the
+moment anything wants rate limiting or an audit trail by device.
 
 Deferred: nothing new.

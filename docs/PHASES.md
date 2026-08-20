@@ -300,3 +300,29 @@ Revert:
 Deferred: raising the context beyond 32768, and any summarization or
 compaction strategy. Trigger: a real conversation hitting the limit —
 log the conversation and what was lost here first.
+
+### Phase 1 closed
+
+All seven feature criteria met. What runs: LibreChat and MongoDB on the
+`core` profile, LibreChat on `127.0.0.1:3080` and Mongo on nothing,
+against the host's Ollama over `host.docker.internal:11434/v1`. Both
+models discovered rather than listed, titling on the 0.6b, context pinned
+at 32768, registration closed, conversations surviving a full cycle.
+`scripts/check`: 21 passed, 0 failed.
+
+Multi-turn coherence and sidebar persistence were confirmed in the UI by
+the owner; everything else is asserted by `scripts/check`.
+
+Two host settings carry a reboot caveat, both set with `launchctl setenv`
+and neither surviving one:
+
+    OLLAMA_HOST=0.0.0.0:11434        # story #9
+    OLLAMA_CONTEXT_LENGTH=32768      # story #12
+
+`scripts/check phase1` fails on either if it reverts. Phase 2 narrows the
+first to the tailnet address plus the container bridge, which is also
+when this pair should stop being launchctl variables.
+
+Standing exposure carried into Phase 2: port 11434 is open to the LAN
+with the macOS firewall off, accepted knowingly in story #9. LibreChat
+itself is not — `127.0.0.1` only.

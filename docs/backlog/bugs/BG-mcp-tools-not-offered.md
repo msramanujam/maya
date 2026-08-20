@@ -2,7 +2,7 @@
 gh_issue: 43
 gh_type: bug
 parent: FT-phase-4-mcp-filesystem
-status: in-progress
+status: done
 phase: 4
 spec:
 ---

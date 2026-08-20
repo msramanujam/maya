@@ -1,4 +1,4 @@
-# LibreChat configuration. Mounted read-only at /app/librechat.yaml and
+# LibreChat configuration. Mounted read-only at /app/librechat-config/ and
 # referenced by CONFIG_PATH; see compose.yaml.
 #
 # One endpoint: the gateway. LibreChat asks for an alias and does not

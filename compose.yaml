@@ -56,14 +56,17 @@ services:
       HOST: 0.0.0.0
       PORT: 3080
       MONGO_URI: mongodb://mongo:27017/LibreChat
-      CONFIG_PATH: /app/librechat.yaml
+      CONFIG_PATH: /app/librechat-config/librechat.yaml
       # Public origin, so absolute links and cookies are built against
       # the tailnet URL rather than LibreChat's default localhost:3080.
       DOMAIN_CLIENT: ${MAYA_PUBLIC_URL}
       DOMAIN_SERVER: ${MAYA_PUBLIC_URL}
     volumes:
-      # Read-only: the app reads this file, it never writes it.
-      - ./config/librechat/librechat.yaml:/app/librechat.yaml:ro
+      # Directory, not the file: git replaces inodes rather than editing
+      # in place, so a single-file mount silently detaches on checkout or
+      # pull and the container finds nothing there on its next restart.
+      # See docs/PHASES.md, bug #32.
+      - ./config/librechat:/app/librechat-config:ro
       - ./data/librechat/images:/app/client/public/images
       - ./data/librechat/uploads:/app/uploads
       - ./data/librechat/logs:/app/api/logs
@@ -87,11 +90,14 @@ services:
     profiles: [gateway]
     restart: unless-stopped
     # No ports. Callers reach it on maya-internal by name.
-    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    command: ["--config", "/app/litellm-config/config.yaml", "--port", "4000"]
     environment:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
     volumes:
-      - ./config/litellm/config.yaml:/app/config.yaml:ro
+      # Directory, not the file: a single-file bind mount binds an inode,
+      # and git replaces inodes rather than editing in place, so a
+      # checkout or pull silently detaches it. See docs/PHASES.md, bug #32.
+      - ./config/litellm:/app/litellm-config:ro
     # maya-edge for the same reason LibreChat needs it: Ollama is on the
     # host, and maya-internal has no gateway, so host.docker.internal
     # does not resolve there. Membership is not permission to publish.
@@ -108,6 +114,7 @@ services:
     container_name: maya-caddy
     profiles: [edge]
     restart: unless-stopped
+    command: ["caddy", "run", "--config", "/etc/caddy/conf/Caddyfile", "--adapter", "caddyfile"]
     depends_on:
       librechat:
         condition: service_healthy
@@ -117,7 +124,8 @@ services:
     ports:
       - "${TAILSCALE_IP}:443:443"
     volumes:
-      - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Directory, not the file — see bug #32.
+      - ./config/caddy:/etc/caddy/conf:ro
       - ./data/tailscale:/etc/caddy/certs:ro
       - ./data/caddy/data:/data
       - ./data/caddy/config:/config

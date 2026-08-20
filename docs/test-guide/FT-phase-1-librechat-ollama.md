@@ -256,10 +256,13 @@ Pick `general` and send:
 
 **Pass:** a sensible sentence naming Paris.
 
-The first message after starting the stack takes 10–30 seconds — the
-27-billion-parameter model is being loaded into memory. Later messages
-are much faster. Nothing is being sent over the internet; the answer is
-computed on this Mac.
+Answers normally come back in a few seconds. The very first message
+after restarting the Mac is slower — sometimes a few minutes — because
+the 31 GB model is being read from disk. There is no progress bar while
+that happens, so it can look frozen. It is not; wait it out. After that
+first load the model stays in memory and every later message is quick.
+
+Nothing is sent over the internet; the answer is computed on this Mac.
 
 **Fail:** an error banner, or it hangs past a minute. Check the menu-bar
 Ollama icon is there, then see step 1.3.

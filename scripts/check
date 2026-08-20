@@ -428,6 +428,21 @@ check_phase2() {
   # launchctl setenv is lost on reboot, and Ollama reads its environment
   # at launch, so a revert is silent: 46 GB resident instead of 31 GB,
   # with nothing to announce it.
+  # -- bug #31: the model stays resident ----------------------------------
+  # Default unloads after five minutes idle; reloading the 27B reads
+  # 31 GB back — seconds from the page cache, minutes from SSD, with no
+  # progress shown either way. -1 keeps it loaded at a standing cost of
+  # 31 GB.
+  local keep
+  keep=$(launchctl getenv OLLAMA_KEEP_ALIVE 2>/dev/null)
+  if [ "$keep" = "-1" ]; then
+    ok "OLLAMA_KEEP_ALIVE is -1 (models stay resident)"
+  elif [ -z "$keep" ]; then
+    bad "OLLAMA_KEEP_ALIVE unset — the model unloads after 5 minutes idle and the next message stalls. Run scripts/install-host-env and restart Ollama"
+  else
+    bad "OLLAMA_KEEP_ALIVE is '$keep', expected '-1' (see docs/PHASES.md)"
+  fi
+
   local label agent
   label="com.maya.ollama-env"
   agent="$HOME/Library/LaunchAgents/$label.plist"

@@ -2,7 +2,7 @@
 gh_issue: 32
 gh_type: bug
 parent: EP-maya-v1
-status: in-progress
+status: done
 phase: 3
 spec:
 ---

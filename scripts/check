@@ -290,6 +290,31 @@ check_phase1() {
 check_phase2() {
   head_ "Phase 2 — Remote access"
 
+  # -- story #21: tailnet TLS certificate ---------------------------------
+  # Tailscale issues for 90 days. Our copy is a static file — nothing
+  # renews it on its own — so this is the reminder, with enough runway to
+  # act on it.
+  local ts_bin domain crt
+  ts_bin="${TAILSCALE_BIN:-/Applications/Tailscale.app/Contents/MacOS/Tailscale}"
+  if [ ! -x "$ts_bin" ]; then
+    bad "tailscale CLI not found at $ts_bin"
+  else
+    domain=$("$ts_bin" status --json 2>/dev/null \
+      | python3 -c 'import sys,json; d=json.load(sys.stdin).get("CertDomains") or [""]; print(d[0])' 2>/dev/null)
+    if [ -z "$domain" ]; then
+      bad "tailnet has no cert domain — enable HTTPS Certificates at https://login.tailscale.com/admin/dns"
+    else
+      crt="data/tailscale/$domain.crt"
+      if [ ! -f "$crt" ]; then
+        bad "no certificate at $crt — run scripts/tailscale-cert"
+      elif ! openssl x509 -in "$crt" -noout -checkend 1209600 >/dev/null 2>&1; then
+        bad "certificate for $domain expires within 14 days ($(openssl x509 -in "$crt" -noout -enddate | cut -d= -f2)) — run scripts/tailscale-cert"
+      else
+        ok "tailnet certificate valid until $(openssl x509 -in "$crt" -noout -enddate | cut -d= -f2)"
+      fi
+    fi
+  fi
+
   # -- story #23: Ollama not reachable off this host ----------------------
   # #9 opened 11434 to the LAN, knowingly. It turned out to be
   # unnecessary — see the note in check_phase1 — so the exposure is

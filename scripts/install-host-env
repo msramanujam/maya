@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# Install the LaunchAgent that sets Ollama's environment at login.
+# Install the host-level bits Maya needs but cannot put in a container:
+#
+#   - a LaunchAgent setting Ollama's environment at login. Without it,
+#     `launchctl setenv` is lost on every reboot and Ollama comes back at
+#     its full 262144 context — 46 GB resident instead of 31 GB.
+#   - a `tailscale` shim on PATH, since the CLI lives inside the app
+#     bundle.
 #
 # Usage: scripts/install-host-env [--uninstall]
 #
-# Without this, `launchctl setenv` is lost on every reboot and Ollama
-# comes back at its full 262144 context — 46 GB resident instead of 31 GB.
-# See docs/PHASES.md, "Narrow the Ollama bind".
+# See docs/PHASES.md, "Narrow the Ollama bind" and "Tailscale CLI".
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -14,10 +18,14 @@ LABEL="com.maya.ollama-env"
 SRC="config/launchd/$LABEL.plist"
 DEST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
+SHIM_SRC="config/host/tailscale-shim.sh"
+SHIM_DEST="${TAILSCALE_SHIM_DIR:-/opt/homebrew/bin}/tailscale"
+
 if [ "${1:-}" = "--uninstall" ]; then
   launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
   rm -f "$DEST"
   launchctl unsetenv OLLAMA_CONTEXT_LENGTH
+  [ -f "$SHIM_DEST" ] && rm -f "$SHIM_DEST" && echo "removed $SHIM_DEST"
   echo "removed $DEST and unset OLLAMA_CONTEXT_LENGTH"
   echo "restart the Ollama app for it to take effect"
   exit 0
@@ -40,5 +48,16 @@ for _ in $(seq 1 20); do
   sleep 0.2
 done
 echo "OLLAMA_CONTEXT_LENGTH is now: '$(launchctl getenv OLLAMA_CONTEXT_LENGTH)'"
+
+# A symlink here would break: the CLI derives its bundle identity from
+# its own path. See the shim's own comment.
+if [ -w "$(dirname "$SHIM_DEST")" ]; then
+  install -m 0755 "$SHIM_SRC" "$SHIM_DEST"
+  echo "installed $SHIM_DEST ($("$SHIM_DEST" version 2>/dev/null | head -1))"
+else
+  echo "skipped the tailscale shim: $(dirname "$SHIM_DEST") is not writable." >&2
+  echo "  sudo install -m 0755 $SHIM_SRC $SHIM_DEST" >&2
+fi
+
 echo
 echo "Restart the Ollama app for a running server to pick this up."

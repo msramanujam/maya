@@ -669,6 +669,32 @@ check_phase4() {
   fi
 }
 
+# --------------------------------------------------------------- phase 5
+check_phase5() {
+  head_ "Phase 5 — Search and fetch"
+
+  # -- story #45: SearXNG --------------------------------------------------
+  # JSON, not HTML: stock SearXNG serves only HTML, which a tool cannot
+  # parse. Reached the way the tool reaches it, from maya-internal.
+  local n
+  n=$(docker run --rm --network maya-internal curlimages/curl:latest -sS -m 60 \
+        "http://maya-searxng:8080/search?q=apple+m3+max&format=json" 2>/dev/null \
+      | python3 -c 'import sys,json;print(len(json.load(sys.stdin).get("results",[])))' 2>/dev/null)
+  if [ "${n:-0}" -gt 0 ]; then
+    ok "searxng returns JSON results ($n)"
+  else
+    bad "searxng returned no JSON results — is `json` in search.formats? (config/searxng/settings.yml)"
+  fi
+
+  local spubs
+  spubs=$(docker compose --profile web ps --format '{{.Names}} {{.Publishers}}' 2>/dev/null | awk '/maya-searxng/')
+  if printf '%s\n' "$spubs" | awk '/\{[0-9.]+ / {found=1} END {exit !found}'; then
+    bad "maya-searxng publishes a host port: $spubs"
+  else
+    ok "maya-searxng publishes nothing"
+  fi
+}
+
 # ------------------------------------------------------------------- main
 section="${1:-all}"
 case "$section" in
@@ -677,7 +703,8 @@ case "$section" in
   phase2)  check_phase2 ;;
   phase3)  check_phase3 ;;
   phase4)  check_phase4 ;;
-  all)     check_prereqs; check_phase1; check_phase2; check_phase3; check_phase4 ;;
+  phase5)  check_phase5 ;;
+  all)     check_prereqs; check_phase1; check_phase2; check_phase3; check_phase4; check_phase5 ;;
   *)       echo "unknown section: $section"; exit 2 ;;
 esac
 

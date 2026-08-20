@@ -127,6 +127,27 @@ services:
       retries: 5
       start_period: 40s
 
+  searxng:
+    image: searxng/searxng:latest
+    container_name: maya-searxng
+    profiles: [web]
+    restart: unless-stopped
+    # No ports. The search tool reaches it by name on maya-internal.
+    environment:
+      SEARXNG_BASE_URL: http://maya-searxng:8080/
+      SEARXNG_SECRET: ${SEARXNG_SECRET}
+    volumes:
+      - ./config/searxng:/etc/searxng:ro
+    # maya-edge because searching means reaching the internet. It
+    # publishes nothing; membership is not permission.
+    networks: [maya-internal, maya-edge]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   caddy:
     image: caddy:2-alpine
     container_name: maya-caddy

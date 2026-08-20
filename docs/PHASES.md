@@ -905,3 +905,30 @@ and useless. What mattered was whether the tools reached the request, and
 nothing in the stack said otherwise until a human asked the model a
 question.
 
+## Phase 5 — Search and fetch
+
+In progress. Sections are appended by each story as it lands.
+
+### SearXNG (story #45)
+
+`searxng/searxng` on the `web` profile, no published port, reached as
+`maya-searxng:8080` from `maya-internal`.
+
+**JSON is off in stock SearXNG**, and enabling it is the entire reason
+this config file exists — the HTML UI is unparseable by a tool.
+`search.formats` carries both: `json` for the tool, `html` so a human can
+open it when debugging why a query returned nothing.
+
+On `maya-edge` as well, because searching means reaching the internet.
+Publishing nothing, as ever — membership is not permission.
+
+Engines trimmed to those that answer without an API key and return
+useful snippets: wikipedia, duckduckgo, brave, startpage. Adding one is
+an edit to `config/searxng/settings.yml`, not a code change.
+
+Measured: a JSON search from a container on `maya-internal` returned 10
+results with titles and URLs.
+
+Deferred: caching search results, and any index over them — the standing
+RAG deferral covers the latter.
+

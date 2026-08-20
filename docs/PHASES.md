@@ -866,3 +866,42 @@ The check reading configs from inside the container is what makes this
 visible at all. `docker inspect` still lists the mount, and the container
 still reports healthy.
 
+### The model was never offered its tools (bug #43)
+
+Asked the time, the model answered "I don't have access to a real-time
+clock". Asked to list Documents, it explained how to use Finder. It was
+holding seventeen tools.
+
+Everything downstream was fine, and proving that first is what made the
+rest quick: the servers advertised (`3 configured servers and 17 tools`),
+every tool worked when called directly, and a LiteLLM request carrying a
+`tools` array came back `finish_reason: tool_calls` with a well-formed
+call. So the model and the gateway were never the problem — LibreChat
+simply was not putting tools in the request.
+
+**LibreChat arms MCP tools only through an agent.** `startup` and
+`chatMenu` — the two per-server options the schema accepts — control
+whether a server *connects* and whether it *appears in the picker*,
+neither of which makes it active. Confirmed against the documentation:
+there is no setting that turns MCP tools on for a plain endpoint. A user
+must select them per conversation, every conversation.
+
+So: an agent carrying the tools, and a `modelSpecs` entry with
+`default: true` pointing new conversations at it. Agents exist only as
+database objects created through the Agent Builder, so that step was the
+owner's; the id lives in `.env` as `MAYA_AGENT_ID` because it is
+machine-specific, like the tailnet name.
+
+`default`, not `enforce` — other endpoints and models stay selectable.
+
+`scripts/check` asserts the whole chain rather than any one link: the id
+is set, the agent exists, it carries MCP tools, and a default spec points
+at it. Any one of those silently missing puts the stack back to a model
+that politely explains it has no tools.
+
+The lesson worth keeping: a capability can be present, healthy,
+advertised and completely unavailable. "The servers are running" was true
+and useless. What mattered was whether the tools reached the request, and
+nothing in the stack said otherwise until a human asked the model a
+question.
+

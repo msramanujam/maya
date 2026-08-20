@@ -206,6 +206,55 @@ was lost by stopping the stack.
 
 ---
 
+## 3. Talking to a model
+
+**What this proves.** The chat interface can reach the models on this
+Mac, and a conversation works end to end.
+
+### Step 3.1 — The models appear
+
+Log in at http://127.0.0.1:3080 and open the model picker at the top of
+a new chat.
+
+**Pass:** both models are listed —
+`orcarouter/Qwen3.8-27B-Uncensored:q8_0` and `qwen3:0.6b`, under
+**Ollama**.
+
+**Fail:** the list is empty or the picker is missing. Paste
+`cd ~/Dev/maya && ./scripts/maya logs librechat` and look for
+`Invalid custom config file`.
+
+Nothing lists these models by hand — Maya asks Ollama what it has. Run
+`ollama pull <some-model>` and it shows up here after a reload.
+
+### Step 3.2 — Ask it something
+
+Pick `orcarouter/Qwen3.8-27B-Uncensored:q8_0` and send:
+
+    In one sentence: what is the capital of France?
+
+**Pass:** a sensible sentence naming Paris.
+
+The first message after starting the stack takes 10–30 seconds — the
+27-billion-parameter model is being loaded into memory. Later messages
+are much faster. Nothing is being sent over the internet; the answer is
+computed on this Mac.
+
+**Fail:** an error banner, or it hangs past a minute. Check the menu-bar
+Ollama icon is there, then see step 1.3.
+
+### Step 3.3 — The conversation names itself
+
+Look at the conversation list on the left after that first answer.
+
+**Pass:** the conversation has a short title about France or capitals,
+not "New chat".
+
+The title is written by the small `qwen3:0.6b` model, on purpose — using
+the big one would make you wait twice for the first answer.
+
+---
+
 ## Everything at once
 
 To run every automated check in one go, paste:

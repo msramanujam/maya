@@ -1,0 +1,38 @@
+# LibreChat configuration. Mounted read-only at /app/librechat.yaml and
+# referenced by CONFIG_PATH; see compose.yaml.
+#
+# One endpoint: the host's Ollama, spoken to over its OpenAI-compatible
+# /v1 API. Phase 3 replaces the baseURL below with LiteLLM's and this
+# file barely changes — which is the point of not talking to Ollama's
+# native API here.
+
+version: 1.2.8
+cache: true
+
+endpoints:
+  custom:
+    - name: "Ollama"
+      # Ollama ignores the key entirely, but the OpenAI client insists on
+      # one. It comes from the environment so that nothing key-shaped
+      # ever sits in a committed file, dummy or not.
+      apiKey: "${OLLAMA_API_KEY}"
+      # host.docker.internal, not localhost: Ollama runs natively on the
+      # host because Docker on macOS has no GPU passthrough.
+      baseURL: "http://host.docker.internal:11434/v1"
+      models:
+        # Discovered from /v1/models at runtime, never hand-listed —
+        # pulling a new model with `ollama pull` is enough to see it in
+        # the picker.
+        fetch: true
+        # Which model a new conversation opens on, not the list of what
+        # is available. LibreChat's schema rejects an empty array here
+        # ("Array must contain at least 1 element(s)"), so one name is
+        # unavoidable; fetch above still supplies the picker. Phase 3
+        # replaces this with the `general` alias.
+        default: ["orcarouter/Qwen3.8-27B-Uncensored:q8_0"]
+      titleConvo: true
+      # Titling every conversation on the 27B would block the first
+      # response behind a second cold load. The 0.6b is there precisely
+      # for this kind of utility work.
+      titleModel: "qwen3:0.6b"
+      modelDisplayLabel: "Ollama"

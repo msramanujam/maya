@@ -187,6 +187,41 @@ check_phase1() {
     bad "LibreChat UI not answering on http://127.0.0.1:3080"
   fi
 
+  # -- story #11: Ollama endpoint ----------------------------------------
+  # From inside LibreChat itself, over the exact URL its config uses. The
+  # story-#9 check above proves a container can reach the host; this
+  # proves *this* container can, with this baseURL. The image has no
+  # curl, hence node.
+  local lcmodels
+  lcmodels=$(docker exec maya-librechat node -e \
+    "fetch('http://host.docker.internal:11434/v1/models').then(r=>r.json()).then(j=>console.log((j.data||[]).map(m=>m.id).join(','))).catch(()=>process.exit(1))" \
+    2>/dev/null)
+  if [ -n "$lcmodels" ]; then
+    ok "librechat -> host.docker.internal:11434/v1/models ($lcmodels)"
+  else
+    bad "librechat cannot reach http://host.docker.internal:11434/v1/models"
+  fi
+
+  # Model discovery, not a hand-maintained list. /api/models needs a
+  # session, so assert the two things that produce the picker instead:
+  # the endpoint is loaded with fetch on, and upstream offers more than
+  # the one model named as the default. If both hold and the picker is
+  # still short, the fault is in LibreChat, not in this config.
+  local cfgfetch upstream_n
+  # Comments stripped first — a commented-out `fetch: true` must not
+  # satisfy this, and a bare regex over the file happily matches one.
+  cfgfetch=$(docker exec maya-librechat node -e \
+    "const y=require('fs').readFileSync('/app/librechat.yaml','utf8'); process.stdout.write(y.split('\n').map(l=>l.replace(/#.*\$/,'')).some(l=>/^\s*fetch:\s*true\s*\$/.test(l))?'yes':'no')" \
+    2>/dev/null)
+  upstream_n=$(printf '%s' "$lcmodels" | awk -F, 'NF{print NF}')
+  if [ "$cfgfetch" = yes ] && [ "${upstream_n:-0}" -ge 2 ]; then
+    ok "model discovery on: fetch: true, ${upstream_n} models upstream"
+  elif [ "$cfgfetch" != yes ]; then
+    bad "librechat.yaml is not mounted, or models.fetch is not true (models would have to be hand-listed)"
+  else
+    bad "only ${upstream_n:-0} model(s) upstream — discovery cannot be judged; check 'ollama list'"
+  fi
+
   # -- story #15: registration closed ------------------------------------
   # Asserted against the running container, not against .env: `docker
   # compose restart` reuses the old environment, so .env can read

@@ -2,7 +2,7 @@
 gh_issue: 4
 gh_type: feature
 parent: EP-maya-v1
-status: proposed
+status: ready
 phase: 3
 spec:
 ---
@@ -45,3 +45,8 @@ second backend.
    `config/litellm/config.yaml`.
 5. LiteLLM has no published host port.
 6. `scripts/check phase3` passes and covers criteria 1, 4, 5.
+
+## Stories
+
+- `ST-litellm-gateway-service`
+- `ST-librechat-via-litellm`

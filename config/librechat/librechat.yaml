@@ -32,6 +32,25 @@ endpoints:
       titleModel: "fast"
       modelDisplayLabel: "Maya"
 
+# Every new conversation opens on the Maya agent, which carries the MCP
+# tools. This is the only way to have tools on by default: `startup` and
+# `chatMenu` control whether a server connects and whether it appears in
+# the picker, not whether it is active — LibreChat has no setting that
+# arms MCP tools for a plain endpoint, so without this the model is
+# offered nothing and answers "I don't have access to a real-time clock"
+# while holding seventeen tools. See docs/PHASES.md, bug #43.
+#
+# `default`, not `enforce`: other endpoints and models stay selectable.
+modelSpecs:
+  list:
+    - name: "maya-agent"
+      label: "Maya"
+      default: true
+      description: "The general model, with filesystem, extraction and time tools."
+      preset:
+        endpoint: "agents"
+        agent_id: "${MAYA_AGENT_ID}"
+
 # Tool layer. Servers run as stdio subprocesses of this container: no
 # prebuilt MCP images were reachable, and the alternative — handing a
 # container the Docker socket so it can start them — is a rejected PR

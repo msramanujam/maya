@@ -537,6 +537,32 @@ check_phase4() {
     bad "MCP time server advertised no tools (docker compose logs librechat | grep MCP)"
   fi
 
+  # -- bug #43: the tools are actually offered -----------------------------
+  # Servers advertising tools is not the same as the model being given
+  # them. LibreChat arms MCP tools only through an agent, so this asserts
+  # the whole chain: an agent id is configured, that agent exists, it
+  # carries MCP tools, and a default spec points new conversations at it.
+  local agent_id agent_tools spec
+  agent_id=$(awk -F= '/^MAYA_AGENT_ID=/{sub(/^[^=]*=/,""); print; exit}' .env 2>/dev/null)
+  if [ -z "$agent_id" ]; then
+    bad "MAYA_AGENT_ID not set in .env — new conversations get no tools (see docs/PHASES.md, bug #43)"
+  else
+    agent_tools=$(docker exec maya-mongo mongosh --quiet LibreChat --eval \
+      "const a=db.agents.findOne({id:'$agent_id'}); print(a ? (a.tools||[]).filter(t=>/_mcp_/.test(t)).length : -1)" 2>/dev/null | tr -d '\r')
+    case "$agent_tools" in
+      -1|"") bad "no agent '$agent_id' in the database — create it in the UI and update MAYA_AGENT_ID" ;;
+      0)     bad "agent '$agent_id' carries no MCP tools — attach them in the Agent Builder" ;;
+      *)     ok "default agent carries $agent_tools MCP tools" ;;
+    esac
+    spec=$(docker exec maya-librechat sh -c \
+      "grep -A6 'modelSpecs:' /app/librechat-config/librechat.yaml | grep -c 'default: true'" 2>/dev/null | tr -d '\r')
+    if [ "${spec:-0}" -gt 0 ]; then
+      ok "a default modelSpec pins new conversations to the agent"
+    else
+      bad "no default modelSpec — new conversations will open without tools"
+    fi
+  fi
+
   # -- story #36: the filesystem boundaries --------------------------------
   local FS_CMD="npx -y @modelcontextprotocol/server-filesystem /documents /projects"
 

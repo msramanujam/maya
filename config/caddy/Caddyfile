@@ -1,0 +1,32 @@
+# Maya edge proxy. The only service that publishes a host port.
+#
+# TLS is terminated here with the tailnet certificate fetched by
+# scripts/tailscale-cert — Caddy's own ACME is switched off, since
+# Let's Encrypt cannot reach this host and the certificate already
+# exists. Renewal is `scripts/tailscale-cert`; see docs/PHASES.md.
+
+{
+	# No ACME account, no automatic issuance attempts, no port 80
+	# redirect listener — nothing here is publicly reachable.
+	auto_https off
+	admin off
+}
+
+madhu-m3-mpb.tailadf0a2.ts.net:443 {
+	tls /etc/caddy/certs/madhu-m3-mpb.tailadf0a2.ts.net.crt /etc/caddy/certs/madhu-m3-mpb.tailadf0a2.ts.net.key
+
+	encode zstd gzip
+
+	# LibreChat over maya-internal. It no longer publishes a port of its
+	# own, so this is the only way in.
+	reverse_proxy librechat:3080 {
+		# LibreChat builds absolute URLs and sets cookies from these.
+		header_up X-Forwarded-Proto https
+		header_up X-Forwarded-Host {host}
+	}
+
+	log {
+		output stderr
+		format console
+	}
+}

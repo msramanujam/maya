@@ -133,7 +133,9 @@ running. Or `no .env` — go back to step 2.1.
 
 ### Step 2.3 — Open the interface
 
-Open **http://127.0.0.1:3080** in your browser.
+Open **https://madhu-m3-mpb.tailadf0a2.ts.net** in your browser. This
+works from this Mac and from any of your other devices, as long as
+Tailscale is running on both.
 
 **Pass:** a login screen appears.
 
@@ -163,7 +165,7 @@ second person — takes three steps:
     sed -i '' 's/^ALLOW_REGISTRATION=false$/ALLOW_REGISTRATION=true/' .env
     ./scripts/maya up
 
-Sign up at http://127.0.0.1:3080, then close it again:
+Sign up at https://madhu-m3-mpb.tailadf0a2.ts.net, then close it again:
 
     cd ~/Dev/maya
     sed -i '' 's/^ALLOW_REGISTRATION=true$/ALLOW_REGISTRATION=false/' .env
@@ -174,23 +176,34 @@ the container's old settings, so the change appears to have worked while
 signup quietly stays open. Accounts that already exist are never affected
 by any of this — the setting controls signup, not login.
 
-### Step 2.5 — Nobody else can reach it
+### Step 2.5 — Your devices can reach it, nobody else can
 
-Maya is bound to this Mac alone. From a **different** device on the same
-Wi-Fi, open `http://<this-Mac's-IP>:3080` in a browser.
+Two halves to this.
 
-To get that IP, paste on this Mac:
+**It should work from your own devices.** On a phone, tablet, or another
+computer with Tailscale installed and switched on, open
+https://madhu-m3-mpb.tailadf0a2.ts.net
+
+**Pass:** the Maya login screen, with a padlock and no security warning.
+This works from anywhere — home Wi-Fi, a café, or mobile data — because
+Tailscale carries it, not the local network.
+
+Turn Tailscale off on that device and reload. **Pass:** it now fails to
+connect.
+
+**It should not work for anyone else.** From a device on the same Wi-Fi
+*without* Tailscale, get this Mac's local address:
 
     ipconfig getifaddr en0
 
-**Pass:** the other device fails to connect — "can't be reached",
-"connection refused", or a spinner that gives up.
+and open `http://<that address>:3080` and `https://<that address>` in a
+browser.
 
-**Fail:** the other device shows the Maya login screen. That means the
-interface is on your network when it should not be. Stop and report it.
+**Pass:** both fail to connect.
 
-Note the contrast with step 1.4: the *models* on port 11434 are open to
-your network, deliberately. The *chat interface* on port 3080 is not.
+**Fail:** either shows Maya. That means the interface is on your local
+network when it should only be on your private Tailscale network. Stop
+and report it.
 
 ### Step 2.6 — Stopping and restarting
 
@@ -202,7 +215,7 @@ then:
 
     cd ~/Dev/maya && ./scripts/maya up
 
-Reload http://127.0.0.1:3080 and log in.
+Reload https://madhu-m3-mpb.tailadf0a2.ts.net and log in.
 
 **Pass:** your account still exists and the same password works. Nothing
 was lost by stopping the stack.
@@ -216,7 +229,7 @@ Mac, and a conversation works end to end.
 
 ### Step 3.1 — The models appear
 
-Log in at http://127.0.0.1:3080 and open the model picker at the top of
+Log in at https://madhu-m3-mpb.tailadf0a2.ts.net and open the model picker at the top of
 a new chat.
 
 **Pass:** both models are listed —
@@ -321,7 +334,7 @@ Wait for it to finish, then:
 
     cd ~/Dev/maya && ./scripts/maya up
 
-Reload http://127.0.0.1:3080 and log in.
+Reload https://madhu-m3-mpb.tailadf0a2.ts.net and log in.
 
 **Pass:** the same conversation is in the sidebar, and opening it shows
 the whole exchange — your messages and the replies.

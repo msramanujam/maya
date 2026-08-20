@@ -431,3 +431,45 @@ silently expires takes Caddy down with it.
 Deferred: automating renewal. Trigger: the first time the check catches
 an expiry that should have been handled, or Caddy being restarted often
 enough that a stale file is likely.
+
+### Caddy on the edge (story #22)
+
+`caddy:2-alpine` on the `edge` profile, publishing `100.92.97.39:443` —
+the Tailscale address, from `TAILSCALE_IP` in `.env`. LibreChat no longer
+publishes anything. `scripts/maya` now defaults to `core edge`.
+
+`auto_https off` and `admin off`: the certificate already exists and
+Let's Encrypt cannot reach this host, so Caddy must not try to issue one.
+It serves the file `scripts/tailscale-cert` wrote.
+
+**`127.0.0.1:3080` is gone.** Everything reaches Maya through the
+MagicDNS name now, including this machine. That means Maya is unreachable
+if Tailscale is down, which is a real trade the tailnet-only design
+implies — and `scripts/check` says so rather than reporting a mystery
+failure.
+
+**LibreChat stays on `maya-edge` despite publishing nothing.** Dropping
+it to `maya-internal` alone was the first attempt, and it broke Ollama
+immediately: `internal: true` means no gateway, so `host.docker.internal`
+is unreachable no matter that OrbStack terminates that address on
+loopback. `maya-edge` is not "the network for things that publish", it is
+the only network with a route off the host — and Ollama is on the host.
+Exactly one service publishes; membership is not permission.
+
+`DOMAIN_CLIENT` and `DOMAIN_SERVER` point at the public URL. Without
+them `/api/config` reported `serverDomain: http://localhost:3080`, and
+absolute links and cookies would have been built against an origin that
+no longer exists.
+
+`check_phase1`'s "exactly two containers" assertion had to become "both
+core services running": `docker compose ps` lists every running container
+in the project regardless of `--profile`, so it failed on Caddy's
+presence.
+
+Measured: `https://madhu-m3-mpb.tailadf0a2.ts.net` answers 200 with
+`ssl_verify_result 0`, served cert `CN = madhu-m3-mpb.tailadf0a2.ts.net`
+from Let's Encrypt. Nothing answers on `192.168.50.144` at `:3080` or
+`:443`. `scripts/check`: 28 passed, 0 failed, after a full `down` + `up`,
+with conversations intact.
+
+Deferred: nothing new.

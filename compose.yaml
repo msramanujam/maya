@@ -44,11 +44,9 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
-    # Phase 1 has no edge proxy, so LibreChat publishes directly — bound
-    # to 127.0.0.1, never 0.0.0.0. Phase 2 introduces Caddy, takes this
-    # mapping over, and LibreChat drops back to maya-internal only.
-    ports:
-      - "127.0.0.1:3080:3080"
+    # No ports. Phase 2 moved publishing to Caddy, which is the only
+    # service allowed one. Reach LibreChat through the edge, or from a
+    # container on maya-internal.
     # host-gateway rather than an OrbStack-specific address: Ollama runs
     # natively on the host because Docker on macOS has no GPU passthrough.
     extra_hosts:
@@ -59,19 +57,22 @@ services:
       PORT: 3080
       MONGO_URI: mongodb://mongo:27017/LibreChat
       CONFIG_PATH: /app/librechat.yaml
+      # Public origin, so absolute links and cookies are built against
+      # the tailnet URL rather than LibreChat's default localhost:3080.
+      DOMAIN_CLIENT: ${MAYA_PUBLIC_URL}
+      DOMAIN_SERVER: ${MAYA_PUBLIC_URL}
     volumes:
       # Read-only: the app reads this file, it never writes it.
       - ./config/librechat/librechat.yaml:/app/librechat.yaml:ro
       - ./data/librechat/images:/app/client/public/images
       - ./data/librechat/uploads:/app/uploads
       - ./data/librechat/logs:/app/api/logs
-    # Two networks on purpose. maya-internal is where it speaks to Mongo.
-    # maya-edge is what makes the published port above work at all: on an
-    # `internal: true` network Docker silently drops the mapping (the
-    # container comes up, Publishers shows port 0, and 127.0.0.1:3080 is
-    # dead), and there is no route to host-gateway either. In Phase 1
-    # LibreChat *is* the edge; in Phase 2 Caddy takes maya-edge and the
-    # published port, and this service drops back to maya-internal alone.
+    # Still both, even though this service no longer publishes anything.
+    # maya-internal is where Mongo and Caddy reach it; maya-edge is the
+    # only network here with a route off the host, and Ollama lives on
+    # the host. Dropping to maya-internal alone kills host.docker.internal
+    # outright — `internal: true` means no gateway, so it does not matter
+    # that OrbStack terminates that address on loopback.
     networks: [maya-internal, maya-edge]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -79,6 +80,32 @@ services:
       timeout: 5s
       retries: 5
       start_period: 45s
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: maya-caddy
+    profiles: [edge]
+    restart: unless-stopped
+    depends_on:
+      librechat:
+        condition: service_healthy
+    # The one published port in the stack, and it is bound to the
+    # Tailscale address — not 0.0.0.0, and not the LAN address. Reaching
+    # Maya means being on the tailnet.
+    ports:
+      - "${TAILSCALE_IP}:443:443"
+    volumes:
+      - ./config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/tailscale:/etc/caddy/certs:ro
+      - ./data/caddy/data:/data
+      - ./data/caddy/config:/config
+    networks: [maya-internal, maya-edge]
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 networks:
   # Service-to-service only: no route off the host, no published ports.
@@ -88,9 +115,10 @@ networks:
     driver: bridge
     internal: true
 
-  # The one network that faces the host: whichever service currently
-  # publishes 127.0.0.1:3080 sits here. Phase 1: LibreChat. Phase 2
-  # onward: Caddy, alone.
+  # The only network with a route off the host. Two things need it: the
+  # edge proxy, which publishes a port, and anything that has to reach
+  # Ollama on the host. Membership here is not permission to publish —
+  # exactly one service does that, and it is Caddy.
   maya-edge:
     name: maya-edge
     driver: bridge

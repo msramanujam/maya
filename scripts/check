@@ -799,6 +799,51 @@ check_phase6() {
   fi
 }
 
+# --------------------------------------------------------------- phase 7
+check_phase7() {
+  head_ "Phase 7 — Coding agent"
+
+  # -- story #51: the agent is confined ------------------------------------
+  # It edits files and runs commands, so its reach is exactly what it can
+  # see. Assert what must NOT be there, not just what must.
+  local reach
+  reach=$(docker exec maya-coding sh -c \
+    'for p in /documents /projects /var/run/docker.sock "$HOME/.ssh"; do [ -e "$p" ] && echo "$p"; done' 2>/dev/null | tr '\n' ' ')
+  if [ -z "${reach// /}" ]; then
+    ok "coding agent sees no mounts beyond its repository"
+  else
+    bad "coding agent can reach:$reach"
+  fi
+
+  local cmounts cpubs
+  cmounts=$(docker inspect maya-coding -f '{{range .Mounts}}{{.Destination}} {{end}}' 2>/dev/null | tr -s ' ')
+  if [ "${cmounts// /}" = "/repo" ]; then
+    ok "coding agent has exactly one mount (/repo)"
+  else
+    bad "coding agent mounts more than its repository: $cmounts"
+  fi
+
+  cpubs=$(docker compose --profile coding ps --format '{{.Names}} {{.Publishers}}' 2>/dev/null | awk '/maya-coding/')
+  if printf '%s\n' "$cpubs" | awk '/\{[0-9.]+ / {found=1} END {exit !found}'; then
+    bad "maya-coding publishes a host port: $cpubs"
+  else
+    ok "maya-coding publishes nothing"
+  fi
+
+  # -- story #52: coding and general are different models -------------------
+  # The alias existing is not the same as it resolving somewhere useful.
+  local cmodel gmodel
+  cmodel=$(awk '/model_name: coding/{f=1} f&&/^ *model: /{sub(/^ *model: */,"");print;exit}' config/litellm/config.yaml 2>/dev/null)
+  gmodel=$(awk '/model_name: general/{f=1} f&&/^ *model: /{sub(/^ *model: */,"");print;exit}' config/litellm/config.yaml 2>/dev/null)
+  if [ -z "$cmodel" ] || [ -z "$gmodel" ]; then
+    bad "could not read the coding/general aliases from config/litellm/config.yaml"
+  elif [ "$cmodel" = "$gmodel" ]; then
+    bad "coding and general resolve to the same model ($cmodel) — the alias is not specialised"
+  else
+    ok "coding and general resolve to different models"
+  fi
+}
+
 # ------------------------------------------------------------------- main
 section="${1:-all}"
 case "$section" in
@@ -809,7 +854,8 @@ case "$section" in
   phase4)  check_phase4 ;;
   phase5)  check_phase5 ;;
   phase6)  check_phase6 ;;
-  all)     check_prereqs; check_phase1; check_phase2; check_phase3; check_phase4; check_phase5; check_phase6 ;;
+  phase7)  check_phase7 ;;
+  all)     check_prereqs; check_phase1; check_phase2; check_phase3; check_phase4; check_phase5; check_phase6; check_phase7 ;;
   *)       echo "unknown section: $section"; exit 2 ;;
 esac
 

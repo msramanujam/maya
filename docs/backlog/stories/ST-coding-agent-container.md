@@ -2,7 +2,7 @@
 gh_issue: 51
 gh_type: story
 parent: FT-phase-7-coding-agent
-status: ready
+status: in-progress
 phase: 7
 spec:
 ---

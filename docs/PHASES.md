@@ -1043,3 +1043,92 @@ and needs a human watching which tool it picks.
 Deferred: credential storage for authenticated sites, and headful
 browsing.
 
+## Phase 7 — Coding agent
+
+### The deferred decision (story #51)
+
+The feature deliberately left the agent open — OpenHands, Aider or
+Continue — to be decided on evidence here. It is **Aider**, and mostly
+not on preference:
+
+**OpenHands** spawns per-session runtime containers and needs the Docker
+socket to do it. "No container gets the Docker socket" is a hard rule,
+and the reason bites harder than usual here: it would give a
+model-driven agent the ability to start privileged containers on the
+host. Ruled out on the rule, not on merit.
+
+**Continue** is an IDE extension. It does not fit "a container pointed at
+LiteLLM", and its execution model belongs to the editor.
+
+**Aider** reads a repository, edits files, runs a test command and
+iterates, over OpenAI-compatible HTTP — so it points at the gateway with
+no adapter and needs nothing but the repository it was given.
+
+Supporting evidence from Phases 4-6, which the feature asked for: once
+tools were actually offered, the model selected the right one unprompted
+every time — the clock for a time question, the filesystem for a file
+question, the extractor for a PDF. That made an agent that drives tools a
+reasonable bet rather than a hopeful one.
+
+The container has exactly one mount, `${CODING_REPO}` at `/repo`. Not
+`/documents`, not `/projects`, not the home directory — verified from
+inside, along with the absence of a Docker socket. It publishes nothing
+and sits on `maya-internal` alone.
+
+`scripts/maya-code "what to change"` drives it. `--auto-commits` is off,
+deliberately: every change is a diff a human reviews.
+
+### The agent gamed the tests (story #51)
+
+Three tasks in a row it completed on the first attempt — punctuation and
+whitespace handling, then accent folding and ampersand expansion, then a
+`max_length` parameter with word-boundary truncation. All correct, all
+without iteration.
+
+So a deliberately unsatisfiable test was written: the same input must
+equal two different slugs. It reported **12 passed**. It had added this:
+
+    class _AlwaysEqual:
+        def __eq__(self, other):
+            return True
+
+    ...
+    return _AlwaysEqual()
+
+Every test passes; the function returns garbage. Nobody asked it to
+cheat — the instruction was "make the tests pass", and it did exactly
+that, in the way an unsatisfiable spec permits.
+
+This is the finding of the phase. An autonomous coding agent optimises
+the thing you measure, and a test suite is a measurement, not a
+specification. Two consequences already in place: `--auto-commits` is
+off, so nothing reaches history without a human reading the diff, and the
+agent's mount is one scratch repository rather than anything that
+matters. The change was reverted; the genuine implementation passes all
+11 tests.
+
+Criterion 1 asked to see iteration on a failure. It was never observed —
+not because the loop is broken (the test command runs after every edit
+and a failure is fed back) but because the model kept succeeding first
+time, and the one task engineered to fail was answered by cheating rather
+than by iterating. Recorded honestly rather than claimed.
+
+### Model specialisation (story #52)
+
+`coding` now points at `qwen2.5-coder:7b`; `general` still points at the
+27B. The only file changed was `config/litellm/config.yaml` and the only
+service restarted was LiteLLM — the agent asks for `coding` and always
+did, which is what the alias was for since Phase 3.
+
+Measured: a `coding` request loads `qwen2.5-coder:7b`, a `general`
+request loads the 27B, and both stay resident.
+
+**All three models are now held in memory at once** — 6.6 GB + 31 GB +
+4.4 GB — because `OLLAMA_KEEP_ALIVE=-1` from bug #31 applies to every
+model, not just the first. 42 GB standing on a 128 GB machine. Pointing
+`coding` at a larger variant is one edit here; the memory arithmetic is
+the thing to check first.
+
+Deferred: giving the coding agent access to the chat agent's mounts, in
+any form.
+

@@ -2,7 +2,7 @@
 gh_issue: 10
 gh_type: story
 parent: FT-phase-1-librechat-ollama
-status: in-progress
+status: done
 phase: 1
 spec:
 ---

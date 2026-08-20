@@ -79,6 +79,9 @@ services:
       # read-only at the mount, so the MCP server's own path checks are
       # not the only thing between the model and the disk. Never the home
       # directory itself, never the host root.
+      # Our own MCP servers. Read-only: the container runs them, it does
+      # not edit them.
+      - ./mcp:/app/mcp:ro
       - ${HOME}/Documents:/documents:ro
       # Read-write, promoted deliberately in story #37. /documents stays
       # ro: the model may read what you wrote, and write only where you

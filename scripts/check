@@ -611,6 +611,36 @@ check_phase4() {
   else
     bad "write to /projects did not reach $HOME/Dev/$probe_rel"
   fi
+
+  # -- story #38: document extraction --------------------------------------
+  # Fixtures are committed rather than picked from Documents, so this
+  # asserts on a known string and does not depend on what happens to be
+  # on the owner's disk.
+  local EX_CMD="uvx --with pypdf --with python-docx --with openpyxl python /app/mcp/extract/server.py"
+  local MARK="MAYA-FIXTURE-MARKER-7412"
+  local fx out missed=""
+  for fx in sample.pdf sample.docx sample.xlsx; do
+    out=$(docker exec -i maya-librechat python3 - \
+            extract_document "{\"path\":\"/projects/maya/docs/fixtures/$fx\"}" \
+            -- $EX_CMD < scripts/lib/mcp-call.py 2>/dev/null)
+    printf '%s' "$out" | grep -q "$MARK" || missed="$missed $fx"
+  done
+  if [ -z "$missed" ]; then
+    ok "extraction reads pdf, docx and xlsx"
+  else
+    bad "extraction failed for:$missed (expected the fixture marker)"
+  fi
+
+  # The extractor has its own file access, so it needs its own boundary.
+  local esc2
+  esc2=$(docker exec -i maya-librechat python3 - \
+           extract_document '{"path":"/documents/../etc/passwd"}' \
+           -- $EX_CMD < scripts/lib/mcp-call.py 2>/dev/null)
+  if printf '%s' "$esc2" | grep -q '^ERROR'; then
+    ok "extraction refuses paths outside /documents and /projects"
+  else
+    bad "extraction escaped the allowed roots: $(printf '%s' "$esc2" | head -c 120)"
+  fi
 }
 
 # ------------------------------------------------------------------- main

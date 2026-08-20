@@ -811,3 +811,37 @@ intended; an interactive `zsh` needs the words written out.
 Deferred: a deletion policy, and write access to `/documents` — the
 latter not in this phase at all.
 
+### Document extraction (story #38)
+
+`mcp/extract/server.py` — 144 lines, ours, speaking MCP over stdio.
+
+**Why ours.** The LibreChat image is Alpine/musl, and every packaged
+extractor tried resolves to native wheels built for glibc.
+`markitdown-mcp` fails on `onnxruntime`, which publishes no musl build,
+and pinning the interpreter does not help — the wheel simply does not
+exist for this platform. `pypdf`, `python-docx` and `openpyxl` are pure
+Python and install in 63ms. Writing 144 auditable lines beat carrying a
+dependency tree that cannot be satisfied.
+
+This adds `mcp/` to the repo layout: our own MCP servers, mounted
+read-only into the container that runs them.
+
+The server enforces `/documents` and `/projects` itself, via
+`os.path.realpath`, because it opens files directly and would otherwise
+read anything in the container — including the LibreChat config. That is
+a second, independent boundary from the filesystem server's, and both are
+asserted. Output is capped at 200,000 characters so one long PDF cannot
+flood the context.
+
+Fixtures are committed under `docs/fixtures/` and carry a known marker,
+so the check asserts on a string rather than on whatever happens to be in
+the owner's Documents folder. They were generated *through* the
+`/projects` mount — which is also an end-to-end demonstration that write
+access works, since they appeared in the repo.
+
+Verified: the marker is extracted from PDF, DOCX and XLSX; the LibreChat
+config and `/documents/../etc/passwd` are both refused.
+
+Deferred: OCR of scanned images. The standing RAG deferral is unchanged —
+extraction is not indexing.
+

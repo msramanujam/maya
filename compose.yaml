@@ -1,0 +1,93 @@
+# Maya — one compose file for all seven phases.
+#
+# Phases enable services with profiles, never with overlay files. The
+# active profile set is composed by `scripts/maya`; see CLAUDE.md.
+#
+#   core     phase 1  LibreChat + MongoDB
+#   edge     phase 2  Caddy reverse proxy (the only service that may
+#                     publish a host port once it exists)
+#   gateway  phase 3  LiteLLM
+#   tools    phase 4  MCP servers
+#   web      phase 5  SearXNG
+#   browser  phase 6  Playwright
+#   coding   phase 7  coding agent
+#
+# Profiles beyond `core` are reserved names only — compose has no way to
+# declare a profile before a service uses it, so they are recorded here
+# and in x-maya-profiles below until their phase lands.
+
+x-maya-profiles: [core, edge, gateway, tools, web, browser, coding]
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: maya-mongo
+    profiles: [core]
+    restart: unless-stopped
+    # No ports: conversation state is reachable only from inside
+    # maya-internal. Nothing on the host needs to speak Mongo.
+    volumes:
+      - ./data/mongo:/data/db
+    networks: [maya-internal]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  librechat:
+    image: ghcr.io/danny-avila/librechat:latest
+    container_name: maya-librechat
+    profiles: [core]
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    # Phase 1 has no edge proxy, so LibreChat publishes directly — bound
+    # to 127.0.0.1, never 0.0.0.0. Phase 2 introduces Caddy, takes this
+    # mapping over, and LibreChat drops back to maya-internal only.
+    ports:
+      - "127.0.0.1:3080:3080"
+    # host-gateway rather than an OrbStack-specific address: Ollama runs
+    # natively on the host because Docker on macOS has no GPU passthrough.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file: [.env]
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3080
+      MONGO_URI: mongodb://mongo:27017/LibreChat
+    volumes:
+      - ./data/librechat/images:/app/client/public/images
+      - ./data/librechat/uploads:/app/uploads
+      - ./data/librechat/logs:/app/api/logs
+    # Two networks on purpose. maya-internal is where it speaks to Mongo.
+    # maya-edge is what makes the published port above work at all: on an
+    # `internal: true` network Docker silently drops the mapping (the
+    # container comes up, Publishers shows port 0, and 127.0.0.1:3080 is
+    # dead), and there is no route to host-gateway either. In Phase 1
+    # LibreChat *is* the edge; in Phase 2 Caddy takes maya-edge and the
+    # published port, and this service drops back to maya-internal alone.
+    networks: [maya-internal, maya-edge]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+networks:
+  # Service-to-service only: no route off the host, no published ports.
+  # Everything that does not have to face outward lives here alone.
+  maya-internal:
+    name: maya-internal
+    driver: bridge
+    internal: true
+
+  # The one network that faces the host: whichever service currently
+  # publishes 127.0.0.1:3080 sits here. Phase 1: LibreChat. Phase 2
+  # onward: Caddy, alone.
+  maya-edge:
+    name: maya-edge
+    driver: bridge

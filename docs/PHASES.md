@@ -83,3 +83,46 @@ Revert (back to loopback-only):
 Deferred: narrowing the bind to the tailnet address plus the container
 bridge. Trigger: Phase 2 (`FT-phase-2-remote-access`), which is when the
 tailnet address exists to bind to.
+
+### Compose scaffold (story #10)
+
+One `compose.yaml`, profiles rather than overlay files. `core` carries
+`mongo:7` and `ghcr.io/danny-avila/librechat:latest`; `edge`, `gateway`,
+`tools`, `web`, `browser` and `coding` are reserved names recorded in the
+file's header and `x-maya-profiles` until their phase lands — compose has
+no way to declare a profile before a service uses it.
+
+`scripts/maya up|down|logs|status` composes the active profile set
+(`MAYA_PROFILES`, default `core`) and creates the bind-mount directories
+before compose can create them root-owned.
+
+**Two networks, not one.** The first attempt put both services on
+`maya-internal` alone (`internal: true`, per CLAUDE.md). The stack came
+up healthy and looked correct — but `internal: true` silently drops
+published ports: `docker compose ps` showed
+`maya-librechat [{ 3080 0 tcp}]`, a published port of 0, and
+`127.0.0.1:3080` refused connections. There was no route to
+`host-gateway` either, so Ollama would have been unreachable in story #11
+for the same reason.
+
+So: `maya-internal` (`internal: true`) carries service-to-service traffic
+and holds Mongo alone; `maya-edge` is an ordinary bridge, and whichever
+service currently faces the host sits on it too. Phase 1 that is
+LibreChat, which is its own edge. Phase 2 gives `maya-edge` to Caddy and
+drops LibreChat back to `maya-internal` alone. Mongo never leaves
+`maya-internal` in any phase.
+
+Measured: `scripts/check` 16 passed, 0 failed, including after a full
+`scripts/maya down` + `up`. Publishing is `maya-librechat
+[{127.0.0.1 3080 3080 tcp}]` and `maya-mongo [{ 27017 0 tcp}]` — nothing
+on `0.0.0.0`. `http://192.168.50.144:3080` (this machine's LAN address)
+is refused both from the host and from a container. Registration through
+`POST /api/auth/register` created a user row in Mongo; the throwaway
+account was deleted afterwards, so the database ships empty. A marker
+document written before `down` was still readable after `up`.
+
+Secrets: `.env` is generated locally with `openssl rand -hex` and
+gitignored; `.env.example` carries key names, the generating command, and
+placeholder shapes only.
+
+Deferred: nothing new.

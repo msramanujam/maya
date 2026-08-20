@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Maya stack control. Composes the active profile set, then hands off to
+# docker compose. See CLAUDE.md and compose.yaml for what each profile is.
+#
+# Usage: scripts/maya <up|down|logs|status> [args...]
+#
+# The active set defaults to the profiles Phase 1 needs. Override it for
+# a session with MAYA_PROFILES:
+#
+#   MAYA_PROFILES="core edge" scripts/maya up
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+MAYA_PROFILES="${MAYA_PROFILES:-core}"
+
+if [ ! -f .env ]; then
+  echo "no .env — copy .env.example and fill it in:" >&2
+  echo "    cp .env.example .env" >&2
+  echo "then generate each secret with the openssl line above its key." >&2
+  exit 1
+fi
+
+# --profile core --profile edge ...
+profile_args=()
+for p in $MAYA_PROFILES; do
+  profile_args+=(--profile "$p")
+done
+
+compose() { docker compose "${profile_args[@]}" "$@"; }
+
+cmd="${1:-}"; shift || true
+
+case "$cmd" in
+  up)
+    # Bind mounts, so the host directories must exist first or Docker
+    # creates them as root-owned.
+    mkdir -p data/mongo data/librechat/images data/librechat/uploads \
+             data/librechat/logs
+    compose up -d "$@"
+    compose ps
+    ;;
+  down)
+    compose down "$@"
+    ;;
+  logs)
+    compose logs --tail 100 -f "$@"
+    ;;
+  status)
+    compose ps "$@"
+    ;;
+  ""|-h|--help|help)
+    awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "$0"
+    echo
+    echo "active profiles: $MAYA_PROFILES"
+    ;;
+  *)
+    echo "unknown command: $cmd" >&2
+    echo "try: up | down | logs | status" >&2
+    exit 2
+    ;;
+esac

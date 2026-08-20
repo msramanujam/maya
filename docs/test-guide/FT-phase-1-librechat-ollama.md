@@ -89,6 +89,101 @@ minute. The reasoning and both fixes are written down in
 
 ---
 
+## 2. Starting Maya and creating your account
+
+**What this proves.** The chat interface starts, keeps its data on this
+Mac, and is reachable from this Mac only.
+
+### Step 2.1 — First-time setup (once, ever)
+
+Skip this if you have run Maya before. Paste:
+
+    cd ~/Dev/maya && ls .env
+
+If it prints `.env`, you are set — skip to step 2.2. If it says `No such
+file`, paste these two blocks, one at a time:
+
+    cd ~/Dev/maya && cp .env.example .env
+
+    cd ~/Dev/maya && printf 'CREDS_KEY=%s\nCREDS_IV=%s\nJWT_SECRET=%s\nJWT_REFRESH_SECRET=%s\n' \
+      "$(openssl rand -hex 32)" "$(openssl rand -hex 16)" \
+      "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" >> .env
+
+**Pass:** no output, no error. That file holds this machine's private
+keys. It is never uploaded and never committed.
+
+### Step 2.2 — Start it
+
+Paste:
+
+    cd ~/Dev/maya && ./scripts/maya up
+
+The very first run downloads about 1 GB and takes a few minutes. Later
+runs take seconds.
+
+**Pass:** a small table appears at the end with two rows — `maya-mongo`
+and `maya-librechat` — and the STATUS column says `Up` for both. The
+first minute may say `health: starting`; that is fine.
+
+**Fail:** `Cannot connect to the Docker daemon` — Docker/OrbStack is not
+running. Or `no .env` — go back to step 2.1.
+
+### Step 2.3 — Open the interface
+
+Open **http://127.0.0.1:3080** in your browser.
+
+**Pass:** a login screen appears.
+
+**Fail:** "This site can't be reached". Wait a minute — LibreChat takes
+up to 45 seconds on a cold start — then reload. Still nothing: paste
+`cd ~/Dev/maya && ./scripts/maya logs librechat` and send what appears.
+
+### Step 2.4 — Create your account
+
+On that login screen click **Sign up**, fill in name, username, email,
+and a password, and submit. The email address is never contacted — this
+is a local account on this Mac. Any address works.
+
+**Pass:** you land in the chat interface.
+
+There is no model to talk to yet — that is the next story. An empty chat
+screen at this stage is the correct result.
+
+### Step 2.5 — Nobody else can reach it
+
+Maya is bound to this Mac alone. From a **different** device on the same
+Wi-Fi, open `http://<this-Mac's-IP>:3080` in a browser.
+
+To get that IP, paste on this Mac:
+
+    ipconfig getifaddr en0
+
+**Pass:** the other device fails to connect — "can't be reached",
+"connection refused", or a spinner that gives up.
+
+**Fail:** the other device shows the Maya login screen. That means the
+interface is on your network when it should not be. Stop and report it.
+
+Note the contrast with step 1.4: the *models* on port 11434 are open to
+your network, deliberately. The *chat interface* on port 3080 is not.
+
+### Step 2.6 — Stopping and restarting
+
+Paste:
+
+    cd ~/Dev/maya && ./scripts/maya down
+
+then:
+
+    cd ~/Dev/maya && ./scripts/maya up
+
+Reload http://127.0.0.1:3080 and log in.
+
+**Pass:** your account still exists and the same password works. Nothing
+was lost by stopping the stack.
+
+---
+
 ## Everything at once
 
 To run every automated check in one go, paste:

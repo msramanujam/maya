@@ -12,7 +12,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-MAYA_PROFILES="${MAYA_PROFILES:-core edge}"
+MAYA_PROFILES="${MAYA_PROFILES:-core edge gateway}"
 
 if [ ! -f .env ]; then
   echo "no .env — copy .env.example and fill it in:" >&2

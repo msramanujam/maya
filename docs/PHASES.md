@@ -513,3 +513,52 @@ Standing caveats carried forward:
 | Reboot persistence of the Ollama settings is unproven | The next real reboot; `scripts/check phase2` is the test |
 
 Deferred: nothing new.
+
+## Phase 3 — LiteLLM gateway
+
+In progress. Sections are appended by each story as it lands.
+
+### The gateway (story #27)
+
+`ghcr.io/berriai/litellm:main-stable` on the `gateway` profile, no
+published port, reached as `maya-litellm:4000` from `maya-internal`.
+`scripts/maya` now defaults to `core edge gateway`.
+
+`config/litellm/config.yaml` is the one file in this repo allowed to name
+a concrete model. Four aliases:
+
+| Alias | Model | Temp | Timeout | Why |
+|---|---|---|---|---|
+| `general` | the 27B | 0.7 | 600s | day-to-day conversation, vision, tools |
+| `fast` | the 0.6b | 0.3 | 120s | titles, classification — no 27B cold load |
+| `coding` | the 27B | 0.2 | 900s | Phase 7 gives it its own model |
+| `reasoning` | the 27B | 0.6 | 900s | thinking, with room to use it |
+
+`coding` and `reasoning` point at the same model as `general` today. The
+aliases exist now so callers can be written against them before there is
+anything different behind them — that is the point of an alias, and
+Phase 7 changes one line here rather than every consumer.
+
+`ollama_chat/`, not `ollama/`: the former speaks Ollama's `/api/chat`,
+which handles multi-turn and tool calls properly; the latter uses the
+older completion endpoint.
+
+**LiteLLM needs `maya-edge` despite publishing nothing** — the same trap
+LibreChat hit in Phase 2. It reaches Ollama on the host, and
+`maya-internal` has no gateway, so `host.docker.internal` does not
+resolve there. Recorded again because the tidy-looking mistake is to put
+a non-publishing service on the internal network alone.
+
+`num_ctx: 32768` per alias, matching `OLLAMA_CONTEXT_LENGTH` on the host.
+Two places now carry that number; they must move together.
+
+Measured: `/v1/models` from a container on `maya-internal` lists exactly
+`coding, fast, general, reasoning`; chat completions through `general`
+and `fast` both answer. `scripts/check`: 30 passed, 0 failed, after a
+full `down` + `up`. Negative-tested by renaming an alias and by stopping
+the container.
+
+Deferred: LiteLLM's database, virtual keys, usage tracking, budgets —
+unchanged from the standing deferral. Trigger: needing per-consumer keys
+or usage attribution.
+

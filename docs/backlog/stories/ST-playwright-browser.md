@@ -2,7 +2,7 @@
 gh_issue: 49
 gh_type: story
 parent: FT-phase-6-browser
-status: in-progress
+status: done
 phase: 6
 spec:
 ---

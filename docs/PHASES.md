@@ -480,4 +480,36 @@ still distinguishable by user agent, which is how the phone's session was
 identified, but per-client attribution is not available. This matters the
 moment anything wants rate limiting or an audit trail by device.
 
+Confirmed from the phone after the edge went up: `/api/auth/refresh`,
+conversation loads, and live `/api/agents/chat/stream` calls — an
+authenticated session holding a real conversation over HTTPS, not just
+the app shell loading.
+
+### Phase 2 closed
+
+All five feature criteria met. Maya answers only at
+`https://madhu-m3-mpb.tailadf0a2.ts.net`, on the tailnet, with a Let's
+Encrypt certificate. Nothing is reachable on the LAN — not the interface,
+not the models. Registration is closed. `scripts/check`: 28 passed, 0
+failed.
+
+The registration assertion moved from `phase1` to `phase2` here: feature
+criterion 5 requires `scripts/check phase2` to cover it, and story #15
+was a Phase 2 item that landed early.
+
+**A device that is not signed in to the tailnet cannot reach Maya at
+all**, which is the design and also the first thing to check when
+something "won't load" — during verification, four of the eight devices
+on this tailnet were offline, and the one that failed was one of them.
+
+Standing caveats carried forward:
+
+| Caveat | Trigger to revisit |
+|---|---|
+| Certificate renewal is manual (`scripts/tailscale-cert`) | `scripts/check phase2` failing under 14 days remaining |
+| Maya is unreachable when Tailscale is down, including locally | Wanting a local fallback badly enough to add a second listener |
+| Caddy cannot see real client addresses | Wanting rate limiting or per-device audit |
+| Ollama's loopback bind relies on OrbStack terminating `host.docker.internal` on loopback | Moving off OrbStack — `scripts/check phase1` fails loudly if containers lose reachability |
+| Reboot persistence of the Ollama settings is unproven | The next real reboot; `scripts/check phase2` is the test |
+
 Deferred: nothing new.

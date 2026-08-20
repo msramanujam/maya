@@ -2,7 +2,7 @@
 gh_issue: 3
 gh_type: feature
 parent: EP-maya-v1
-status: ready
+status: done
 phase: 2
 spec:
 ---

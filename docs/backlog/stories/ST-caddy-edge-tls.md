@@ -2,7 +2,7 @@
 gh_issue: 22
 gh_type: story
 parent: FT-phase-2-remote-access
-status: in-progress
+status: done
 phase: 2
 spec:
 ---

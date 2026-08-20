@@ -58,7 +58,10 @@ services:
       HOST: 0.0.0.0
       PORT: 3080
       MONGO_URI: mongodb://mongo:27017/LibreChat
+      CONFIG_PATH: /app/librechat.yaml
     volumes:
+      # Read-only: the app reads this file, it never writes it.
+      - ./config/librechat/librechat.yaml:/app/librechat.yaml:ro
       - ./data/librechat/images:/app/client/public/images
       - ./data/librechat/uploads:/app/uploads
       - ./data/librechat/logs:/app/api/logs

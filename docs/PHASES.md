@@ -185,3 +185,61 @@ to re-run it and ignore the first result, which is how a real failure
 gets waved through.
 
 Deferred: nothing new.
+
+### Ollama endpoint (story #11)
+
+`config/librechat/librechat.yaml`, mounted read-only at
+`/app/librechat.yaml` and referenced by `CONFIG_PATH`. One
+`endpoints.custom` entry against
+`http://host.docker.internal:11434/v1` — Ollama's OpenAI-compatible API,
+not its native one, so Phase 3 swaps the `baseURL` for LiteLLM's and this
+file barely changes.
+
+Note the path: `config/librechat/librechat.yaml`, per the CLAUDE.md
+per-service layout, where the story said `config/librechat.yaml`.
+
+Models come from `fetch: true`, so `ollama pull` is enough to see a new
+one in the picker. `models.default` cannot be empty — LibreChat's schema
+rejects it with `Array must contain at least 1 element(s)`, and the
+container exits rather than starting degraded — so one name sits there as
+the model a new conversation opens on. That is a default, not a
+hand-maintained list; Phase 3 replaces it with the `general` alias.
+
+`titleModel: qwen3:0.6b` keeps conversation titling off the 27B, which
+would otherwise put a second cold load in front of the first answer.
+
+The dummy API key lives in `.env` as `OLLAMA_API_KEY` rather than as a
+literal in the YAML. Ollama authenticates nothing and the value is
+ignored, but nothing key-shaped belongs in a committed file even when
+it is inert.
+
+Measured: `/api/models` returns
+`["orcarouter/Qwen3.8-27B-Uncensored:q8_0", "qwen3:0.6b"]` under the
+`ollama` endpoint — both models, one of them never named in config.
+A chat completion over the exact URL LibreChat uses answered "The capital
+of France is Paris." in 9.8s cold; the 0.6b answered in 11.9s cold.
+`scripts/check`: 19 passed, 0 failed.
+
+Titling was confirmed against Ollama's own log rather than LibreChat's,
+which does not record the title request at default verbosity. Both
+models load within two seconds of each other on the first message:
+
+    11:22:14.8  blob 7f4030143c1c, 311 tensors   -> qwen3:0.6b
+    11:22:16    POST /v1/chat/completions  1.76s -> the title
+    11:22:16.5  blob 31756fca94be, 866 tensors   -> the 27B
+    11:22:27    POST /v1/chat/completions 12.74s -> the answer
+
+Ollama's GIN lines carry no model name, so the attribution comes from
+matching load events to manifest digests — worth knowing before trying
+to read that log again.
+
+Verification note: this LibreChat build has no `/api/ask/*` routes — all
+chat runs through the agents pipeline — and driving that from curl was
+not worth the yak-shave, so criteria 2 and 3 were exercised in the UI by
+the owner. `/api/models` needs a session, so the check asserts what
+produces the picker (endpoint loaded, `fetch: true`, more models upstream
+than the one named default) rather than the picker itself; the picker
+contents were confirmed once, by hand, with a throwaway account that was
+deleted afterwards.
+
+Deferred: nothing new.

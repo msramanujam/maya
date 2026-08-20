@@ -32,6 +32,13 @@ In progress. Sections are appended by each story as it lands.
 
 ### Host Ollama bind (story #9)
 
+> **Superseded by story #23, and its premise was wrong.** Containers on
+> OrbStack reach a loopback-bound Ollama perfectly well — see "Narrow the
+> Ollama bind" below. The `0.0.0.0` bind described here was never
+> necessary, and the LAN exposure accepted for it bought nothing. Kept as
+> written because the build log records what was believed at the time;
+> the bind is now back to loopback.
+
 Ollama shipped listening on `127.0.0.1:11434`. A loopback-bound listener
 refuses connections arriving on any other interface, so containers
 calling `host.docker.internal:11434` got connection-refused. Every later
@@ -326,3 +333,62 @@ when this pair should stop being launchctl variables.
 Standing exposure carried into Phase 2: port 11434 is open to the LAN
 with the macOS firewall off, accepted knowingly in story #9. LibreChat
 itself is not — `127.0.0.1` only.
+
+## Phase 2 — Remote access
+
+In progress. Sections are appended by each story as it lands.
+
+### Narrow the Ollama bind (story #23)
+
+**The exposure is closed, and it should never have been opened.** Story
+#9 assumed a loopback-bound Ollama is unreachable from containers, and
+bound `0.0.0.0` to fix it. That premise is false on OrbStack. Container
+traffic to `host.docker.internal` resolves to `0.250.250.254` and arrives
+at the host as:
+
+    TCP 127.0.0.1:62233 -> 127.0.0.1:11434 (ESTABLISHED)
+
+— on loopback. Verified by binding `127.0.0.1:11434` and watching both a
+throwaway container and LibreChat itself list the models. So the fix is
+not to narrow the bind to the tailnet address plus the container bridge,
+as the story anticipated: it is to stop setting `OLLAMA_HOST` at all.
+Ollama's own default is `127.0.0.1:11434`, which is exactly right.
+
+All three ranked options in the story are therefore moot — no pinned
+bridge subnet, no application firewall, no `pf` rule. Nothing on the LAN
+or the tailnet can reach 11434; containers are unaffected. Measured: the
+LAN address refuses from both the host and a container, the tailnet
+address refuses, `docker run ... host.docker.internal:11434/v1/models`
+returns both models.
+
+`host.docker.internal` reaching the host over loopback is an OrbStack
+behaviour, not a Docker guarantee. On a runtime that routes container
+traffic over a bridge instead, the loopback bind would genuinely fail and
+this decision needs revisiting — `scripts/check phase1` fails loudly if
+containers lose reachability, which is the signal to come back here.
+
+**Reboot persistence.** `launchctl setenv` is lost on reboot and
+Ollama reads its environment at launch, so the context window silently
+reverted to 262144 — 46 GB resident instead of 31 GB, with nothing to
+announce it. `config/launchd/com.maya.ollama-env.plist`, installed by
+`scripts/install-host-env`, sets it at login. `OLLAMA_HOST` is
+deliberately absent from that plist: the default is what we want, and a
+setting that exists is a setting that can drift.
+
+`scripts/check phase2` asserts the bind shape, that the LAN address
+actually refuses, and that the agent is loaded. All three were
+negative-tested: unloading the agent, and reopening the bind to
+`0.0.0.0`, each produce the FAIL they exist for.
+
+Deviation from the story: acceptance criterion 3 asked that
+`scripts/check phase1` pass "unchanged". It could not — #9's assertion
+demanded a *non*-loopback listener, which is now precisely the failure
+condition. That assertion moved to `phase2` inverted, and `phase1` now
+asserts only that Ollama is listening at all, since reachability is
+already covered by two checks that call it.
+
+Closed: the story-#9 LAN exposure. Port 11434 is no longer reachable
+from the network, and the macOS application firewall is not needed for
+it.
+
+Deferred: nothing new.

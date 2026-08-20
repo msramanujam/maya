@@ -138,16 +138,38 @@ Open **http://127.0.0.1:3080** in your browser.
 up to 45 seconds on a cold start — then reload. Still nothing: paste
 `cd ~/Dev/maya && ./scripts/maya logs librechat` and send what appears.
 
-### Step 2.4 — Create your account
+### Step 2.4 — Log in
 
-On that login screen click **Sign up**, fill in name, username, email,
-and a password, and submit. The email address is never contacted — this
-is a local account on this Mac. Any address works.
+Enter the email and password of the account on this machine and submit.
 
 **Pass:** you land in the chat interface.
 
 There is no model to talk to yet — that is the next story. An empty chat
 screen at this stage is the correct result.
+
+**Signing up is deliberately closed.** Clicking Sign up and submitting
+gives "Registration is not allowed." Maya is a single-user stack, and
+Phase 2 puts this interface on your Tailscale network — an open signup
+form on a reachable machine is exactly what that phase is meant to
+prevent.
+
+To create an account anyway — a fresh install with no account yet, or a
+second person — takes three steps:
+
+    cd ~/Dev/maya
+    sed -i '' 's/^ALLOW_REGISTRATION=false$/ALLOW_REGISTRATION=true/' .env
+    ./scripts/maya up
+
+Sign up at http://127.0.0.1:3080, then close it again:
+
+    cd ~/Dev/maya
+    sed -i '' 's/^ALLOW_REGISTRATION=true$/ALLOW_REGISTRATION=false/' .env
+    ./scripts/maya up
+
+Use `./scripts/maya up` both times, never `restart`. Restarting reuses
+the container's old settings, so the change appears to have worked while
+signup quietly stays open. Accounts that already exist are never affected
+by any of this — the setting controls signup, not login.
 
 ### Step 2.5 — Nobody else can reach it
 
@@ -191,6 +213,9 @@ To run every automated check in one go, paste:
     cd ~/Dev/maya && scripts/check
 
 **Pass:** the last line reads `N passed, 0 failed`.
+
+One of those checks tries to sign up and expects to be turned away, so
+seeing `registration refused` in the output is the good result.
 
 **Fail:** any line starting with `FAIL`. The text after it says which
 check failed; find the matching section above.

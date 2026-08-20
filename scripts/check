@@ -157,6 +157,34 @@ check_phase1() {
   else
     bad "LibreChat UI not answering on http://127.0.0.1:3080"
   fi
+
+  # -- story #15: registration closed ------------------------------------
+  # Asserted against the running container, not against .env: `docker
+  # compose restart` reuses the old environment, so .env can read
+  # ALLOW_REGISTRATION=false while the container still has true. That
+  # failure is silent — this check is what catches it.
+  local probe code
+  probe="maya-check-probe@invalid.test"
+  code=$(curl -sS -m 15 -o /dev/null -w '%{http_code}' \
+           -X POST http://127.0.0.1:3080/api/auth/register \
+           -H 'Content-Type: application/json' \
+           -d "{\"name\":\"Maya Check\",\"username\":\"mayacheckprobe\",\"email\":\"$probe\",\"password\":\"Nx7!probe-pass-42\",\"confirm_password\":\"Nx7!probe-pass-42\"}" \
+           2>/dev/null || echo 000)
+  case "$code" in
+    2*)
+      # Registration was open after all, so the probe just created a
+      # user. Remove it rather than leaving the row behind.
+      docker exec maya-mongo mongosh --quiet LibreChat \
+        --eval "db.users.deleteOne({email:'$probe'})" >/dev/null 2>&1
+      bad "registration is OPEN (POST /api/auth/register -> $code); probe user removed. Set ALLOW_REGISTRATION=false in .env and run 'scripts/maya up' — not 'restart'"
+      ;;
+    000)
+      bad "registration probe got no response from http://127.0.0.1:3080/api/auth/register"
+      ;;
+    *)
+      ok "registration refused (POST /api/auth/register -> $code)"
+      ;;
+  esac
 }
 
 # ------------------------------------------------------------------- main

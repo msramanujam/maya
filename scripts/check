@@ -7,6 +7,11 @@
 set -uo pipefail
 
 PASS=0; FAIL=0
+
+# How long to let a container sit in `starting` before calling it a
+# failure. LibreChat cold-starts in ~45s; this is comfortably past that
+# without letting a genuinely stuck container hang the run.
+HEALTH_WAIT="${HEALTH_WAIT:-90}"
 ok()   { printf '  PASS  %s\n' "$1"; PASS=$((PASS+1)); }
 bad()  { printf '  FAIL  %s\n' "$1"; FAIL=$((FAIL+1)); }
 head_() { printf '\n== %s ==\n' "$1"; }
@@ -121,13 +126,37 @@ check_phase1() {
 
   # Health, not just running — a container that is up but unhealthy is a
   # failure, and LibreChat answering /health is what the UI depends on.
-  local st
+  #
+  # `starting` is not a verdict, it is the absence of one, so wait it out
+  # rather than sampling once: the operator's procedure is `maya up` then
+  # `check`, and LibreChat needs ~45s from cold. A check that cries wolf
+  # on a healthy stack teaches everyone to re-run it and ignore the first
+  # result, which is how a real failure gets waved through. `unhealthy`,
+  # `none` and `missing` are terminal — those still FAIL immediately, and
+  # so does a container still `starting` when the bound runs out.
+  local st waited
   for c in maya-mongo maya-librechat; do
-    st=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
-           "$c" 2>/dev/null || echo missing)
+    waited=0
+    while :; do
+      st=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+             "$c" 2>/dev/null || echo missing)
+      [ "$st" = starting ] || break
+      [ "$waited" -ge "$HEALTH_WAIT" ] && break
+      sleep 2
+      waited=$((waited+2))
+    done
     case "$st" in
-      healthy) ok "$c healthy" ;;
-      *)       bad "$c health is '$st' (docker compose logs $c --tail 50)" ;;
+      healthy)
+        if [ "$waited" -gt 0 ]; then
+          ok "$c healthy (after ${waited}s)"
+        else
+          ok "$c healthy"
+        fi
+        ;;
+      starting)
+        bad "$c still starting after ${waited}s (docker compose logs $c --tail 50)" ;;
+      *)
+        bad "$c health is '$st' (docker compose logs $c --tail 50)" ;;
     esac
   done
 

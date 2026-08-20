@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local Self-Hosted AI Stack — Build Prompt</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0f1115;
+    --panel: #171a21;
+    --text: #e9edf3;
+    --muted: #aeb7c4;
+    --border: #2b3240;
+    --accent: #7aa2f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 20px 64px;
+  }
+  header {
+    margin-bottom: 20px;
+  }
+  h1 {
+    margin: 0 0 8px;
+    font-size: clamp(28px, 4vw, 42px);
+    line-height: 1.15;
+  }
+  .subtitle {
+    color: var(--muted);
+    margin: 0;
+  }
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    margin: 20px 0;
+    position: sticky;
+    top: 0;
+    padding: 10px 0;
+    background: linear-gradient(var(--bg) 75%, transparent);
+  }
+  button {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font: inherit;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  pre {
+    margin: 0;
+    padding: 26px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  .status {
+    color: var(--muted);
+    font-size: 14px;
+    align-self: center;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --text: #18202b;
+      --muted: #5d6877;
+      --border: #d9e0e8;
+      --accent: #315efb;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Local Self-Hosted AI Stack</h1>
+    <p class="subtitle">Self-contained build prompt for LibreChat + Ollama, evolving toward MCP, web access, and a Codex-style coding environment.</p>
+  </header>
+
+  <div class="toolbar">
+    <button id="copyBtn" type="button">Copy full prompt</button>
+    <span id="status" class="status"></span>
+  </div>
+
+  <div class="card">
+    <pre id="prompt"># Build a Local, Self-Hosted ChatGPT + Codex-Style AI Stack
+
+I want to build a local, self-hosted AI environment that gives me an experience broadly similar to **ChatGPT for general interaction plus Codex for software-development tasks**, while using locally hosted LLMs as the primary reasoning engines.
+
+I currently run **Qwen 3.8 27B through Ollama**. However, the architecture must not be coupled to this particular model or even to Ollama. I want to be able to swap the underlying model later while retaining all higher-level capabilities such as tool calling, filesystem access, web search, browser automation, document access, and coding-agent functionality.
+
+We have chosen **LibreChat** as the primary user interface.
+
+## Core architectural principles
+
+The model should be treated as a replaceable reasoning engine.
+
+Capabilities such as:
+
+- tool calling
+- local file and folder access
+- internet search
+- web-page retrieval
+- interactive browser automation
+- code execution
+- repository access
+- document retrieval
+- MCP integrations
+- permissions
+- conversation state
+
+must belong to the surrounding platform rather than to any particular LLM.
+
+The desired high-level architecture is:
+
+```text
+                         LibreChat
+                             │
+                             ▼
+                      Model Gateway
+                         LiteLLM
+                             │
+                  ┌──────────┼──────────┐
+                  ▼          ▼          ▼
+               Ollama      vLLM      Other APIs
+                  │
+             Local models
+
+
+                         TOOL LAYER
+                             │
+                           MCP
+                             │
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+         Filesystem       Internet       Browser
+            MCP             MCP         Playwright
+                             │
+                           SearXNG
+
+
+                     CODING ENVIRONMENT
+                             │
+                         OpenHands
+                             │
+                          LiteLLM
+                             │
+                         Local LLM
+```
+
+The initial candidate components are:
+
+- **LibreChat** — ChatGPT-style frontend and conversation experience
+- **Ollama** — current local inference server
+- **LiteLLM Proxy** — OpenAI-compatible model gateway and abstraction layer
+- **SearXNG** — self-hosted internet search
+- **MCP servers** — standardized tool/data interfaces
+- **Filesystem MCP** — controlled access to selected local directories
+- **Playwright MCP** — interactive browser automation
+- **OpenHands** — Codex-like autonomous coding environment
+- **Docker / Docker Compose** — deployment and isolation
+
+The architecture should eventually allow other local inference systems such as vLLM or other OpenAI-compatible servers to replace or supplement Ollama.
+
+## Important security requirement
+
+Do not give the LLM unrestricted host access.
+
+Filesystem access should use explicit mounted roots such as:
+
+```text
+/documents    read-only
+/projects     read/write
+/shared       configurable
+```
+
+Destructive operations should eventually be controlled through a permission/approval layer.
+
+Likewise, shell access, browser access, network access, and code execution should be sandboxed wherever practical.
+
+## Development approach
+
+Do **not** attempt to build the entire system at once.
+
+Divide the work into small, testable layers. Each layer should produce a working system before we proceed to the next one.
+
+Use Docker containers wherever reasonable.
+
+At every stage:
+
+1. Explain what architectural problem the layer solves.
+2. Show how it fits into the final architecture.
+3. Give me the exact files/configuration needed.
+4. Explain each important configuration choice.
+5. Give me commands to start it.
+6. Give me simple tests that confirm it works.
+7. Give me troubleshooting steps for likely failures.
+8. Do not move to the next layer until the current layer is working.
+
+Avoid unnecessary frameworks. In particular, do not introduce LangChain, LangGraph, CrewAI, AutoGen, n8n, Flowise, Dify, LlamaIndex, or similar frameworks unless we encounter a concrete requirement that justifies one.
+
+Prefer simple standards-based interfaces such as:
+
+```text
+OpenAI-compatible APIs
+MCP
+HTTP
+Docker networking
+```
+
+over application-specific integrations.
+
+## Proposed build phases
+
+Treat these as a starting point and adjust them if there is a better dependency order.
+
+### Phase 1 — LibreChat + Ollama
+
+Goal:
+
+Get LibreChat running in Docker and successfully chatting with my existing Ollama-hosted Qwen model.
+
+This establishes:
+
+```text
+LibreChat → Ollama → Qwen
+```
+
+At this stage we only care about:
+
+- LibreChat
+- Ollama connectivity
+- model discovery/selection
+- conversation persistence
+- basic inference
+
+No web search, MCP, filesystem access, or coding agent yet.
+
+### Phase 2 — Introduce LiteLLM
+
+Change the architecture to:
+
+```text
+LibreChat → LiteLLM → Ollama → Qwen
+```
+
+LibreChat should no longer depend directly on Ollama.
+
+Define stable logical model names such as:
+
+```text
+general
+coding
+fast
+```
+
+The actual model behind these aliases should be changeable in LiteLLM configuration.
+
+Test switching models without changing LibreChat.
+
+### Phase 3 — MCP foundation
+
+Add MCP support and determine how LibreChat will consume MCP tools.
+
+Establish a clean MCP tool architecture before adding lots of integrations.
+
+Test with one very simple MCP tool.
+
+### Phase 4 — Local filesystem access
+
+Add a filesystem MCP server with carefully scoped mounts.
+
+Example:
+
+```text
+/documents → read-only
+/projects  → read/write
+```
+
+The model should be able to:
+
+- list directories
+- find files
+- read files
+- search files
+
+Write access can be added separately after read-only access works.
+
+### Phase 5 — Internet search
+
+Deploy SearXNG.
+
+Expose search to the agent through a tool such as:
+
+```text
+web_search(query)
+```
+
+The LLM should be able to formulate searches, receive results, and reason over them.
+
+### Phase 6 — Web-page retrieval
+
+Add a lightweight fetch/extraction layer.
+
+The system should distinguish between:
+
+```text
+web_search(query)
+web_fetch(url)
+```
+
+Search discovers information.
+
+Fetch retrieves and cleans an individual page.
+
+Avoid sending raw HTML to the model when clean article/page text can be extracted instead.
+
+### Phase 7 — Interactive browser
+
+Add Playwright MCP.
+
+This should only be used when ordinary search/fetch is insufficient.
+
+Examples:
+
+- JavaScript-heavy websites
+- navigation through multiple pages
+- clicking controls
+- interacting with forms
+- authenticated applications
+
+Keep browser automation distinct from basic web retrieval.
+
+### Phase 8 — Documents and retrieval
+
+Improve handling of:
+
+- PDF
+- DOCX
+- XLSX
+- source-code repositories
+- large directories
+
+Consider indexing/search/RAG only once simple filesystem access proves insufficient.
+
+Avoid introducing a vector database prematurely.
+
+### Phase 9 — Coding agent
+
+Deploy OpenHands separately.
+
+Architecture:
+
+```text
+OpenHands → LiteLLM → local model
+```
+
+Give OpenHands access only to explicitly mounted repositories/workspaces.
+
+Use it for tasks such as:
+
+- inspect repository
+- edit files
+- run builds
+- run tests
+- diagnose failures
+- iterate on fixes
+
+Keep the general LibreChat agent and the autonomous coding environment logically separate even if they use the same model backend.
+
+### Phase 10 — Permissions and sandboxing
+
+Add a proper policy layer distinguishing actions such as:
+
+```text
+SAFE / READ ONLY
+list_directory
+read_file
+search_web
+fetch_url
+
+WRITE
+write_file
+edit_file
+git_commit
+
+DESTRUCTIVE / HIGH RISK
+delete_file
+shell execution
+external side effects
+```
+
+Where appropriate, require explicit user approval before executing higher-risk operations.
+
+### Phase 11 — Model routing and specialization
+
+Once everything works, support different models for different purposes.
+
+For example:
+
+```text
+general     → Qwen
+coding      → Devstral or another coding model
+fast        → smaller local model
+reasoning   → larger local model
+```
+
+Changing any of these models should not alter the tool layer.
+
+## Docker networking goal
+
+Ultimately I expect something similar to:
+
+```text
+                            Internet
+                               │
+                 ┌─────────────┴─────────────┐
+                 │                           │
+              SearXNG                   Playwright
+                 │                           │
+                 └────────────┬──────────────┘
+                              │
+                             MCP
+                              │
+                          LibreChat
+                              │
+                           LiteLLM
+                              │
+                  ┌───────────┴───────────┐
+                  │                       │
+                Ollama                  vLLM
+                  │
+                 GPU
+
+
+                          OpenHands
+                              │
+                           LiteLLM
+                              │
+                         Local model
+```
+
+Only user-facing services should normally be exposed to the LAN.
+
+Internal services such as:
+
+- Ollama
+- LiteLLM
+- MCP servers
+- filesystem services
+- Playwright
+
+should preferably communicate over private Docker networks unless external access is specifically required.
+
+## What I want from you now
+
+Start with **Phase 1 only: LibreChat + my existing Ollama installation**.
+
+Before giving configuration, determine what is necessary to know about the environment. Do not ask questions whose answers can be derived from information already supplied.
+
+Assume:
+
+- Ollama is already installed and working.
+- Qwen 3.8 27B is already running successfully through Ollama.
+- I want LibreChat itself containerized.
+- We will eventually migrate LibreChat from direct Ollama access to LiteLLM in Phase 2, so avoid configuration choices that make that transition unnecessarily difficult.
+
+For Phase 1, provide:
+
+- the directory structure
+- Docker Compose configuration
+- LibreChat configuration
+- environment variables
+- networking configuration needed to reach Ollama
+- startup commands
+- verification steps
+- how to confirm LibreChat sees the Ollama model
+- one or two API-level tests independent of LibreChat where useful
+- troubleshooting guidance
+
+Keep Phase 1 minimal.
+
+Do not introduce LiteLLM, MCP, SearXNG, Playwright, OpenHands, or other components yet.
+
+The immediate success criterion is simply:
+
+```text
+Browser
+   ↓
+LibreChat
+   ↓
+Ollama
+   ↓
+Qwen 3.8 27B
+```
+
+with a successful multi-turn conversation through LibreChat.
+
+Once that works, stop and wait for the next phase.
+</pre>
+  </div>
+</div>
+
+<script>
+const btn = document.getElementById('copyBtn');
+const status = document.getElementById('status');
+btn.addEventListener('click', async () => {
+  const text = document.getElementById('prompt').innerText;
+  try {
+    await navigator.clipboard.writeText(text);
+    status.textContent = 'Copied to clipboard.';
+  } catch (e) {
+    status.textContent = 'Copy failed — select the prompt manually.';
+  }
+  setTimeout(() => status.textContent = '', 2500);
+});
+</script>
+</body>
+</html>

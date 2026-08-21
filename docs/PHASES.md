@@ -15,6 +15,7 @@ trigger does not.
 | Interactive approval gate (MCP proxy) | Capability scoping (read-only mounts, withheld tools) proves too blunt in real use. |
 | vLLM as a second backend | Ollama becomes the bottleneck, or a model ships that Ollama cannot serve. |
 | LiteLLM database / virtual keys | Usage tracking or per-consumer keys are actually needed. |
+| Memory across conversations | Restating the same fact to Maya three times in a week. Log the fact and the occasions in `FT-memory` first. LibreChat's own memory is already present and unconfigured; a notes file under `/projects` is the alternative. |
 
 ## Phase 0 — workflow scaffold
 
